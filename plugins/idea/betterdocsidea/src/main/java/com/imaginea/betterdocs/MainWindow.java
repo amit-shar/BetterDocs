@@ -18,6 +18,7 @@
 package com.imaginea.betterdocs;
 
 import com.intellij.icons.AllIcons;
+import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.DefaultActionGroup;
 import com.intellij.openapi.editor.Document;
@@ -32,10 +33,10 @@ import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.components.JBTabbedPane;
 import com.intellij.ui.treeStructure.Tree;
 import java.awt.Dimension;
+import java.util.UUID;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JComponent;
-import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
@@ -53,8 +54,11 @@ public class MainWindow implements ToolWindowFactory {
     private static final int EDITOR_SCROLL_PANE_HEIGHT = 300;
     private static final String BETTERDOCS = "BetterDocs";
     private static final int UNIT_INCREMENT = 16;
+
     private WindowEditorOps windowEditorOps = new WindowEditorOps();
     private Editor windowEditor;
+    private PropertiesComponent propertiesComponent = PropertiesComponent.getInstance();
+    private String beagleId;
 
     @Override
     public final void createToolWindowContent(final Project project, final ToolWindow toolWindow) {
@@ -64,6 +68,11 @@ public class MainWindow implements ToolWindowFactory {
         JTree jTree = new Tree(root);
         jTree.setRootVisible(false);
         jTree.setAutoscrolls(true);
+
+        if(!propertiesComponent.isValueSet(SettingsPanel.BEAGLE_ID)) {
+            beagleId = UUID.randomUUID().toString();
+            propertiesComponent.setValue(SettingsPanel.BEAGLE_ID, beagleId);
+        }
 
         Document document = EditorFactory.getInstance().createDocument("");
         windowEditor = EditorFactory.getInstance().

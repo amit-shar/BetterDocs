@@ -31,7 +31,7 @@ import org.jetbrains.annotations.Nullable;
 public class SettingsPanel implements Configurable {
     protected static final String BETTER_DOCS_SETTINGS = "BetterDocs Settings";
     private static final String COLUMN_SPECS = "pref, pref:grow";
-    private static final String ROW_SPECS = "pref, pref, pref, pref, pref";
+    private static final String ROW_SPECS = "pref, pref, pref, pref, pref, pref";
     private static final String ELASTIC_SEARCH_URL = "Elastic Search URL";
     private static final String RESULTS_SIZE = "Results size";
     private static final String DISTANCE_FROM_CURSOR = "Distance from cursor";
@@ -39,12 +39,14 @@ public class SettingsPanel implements Configurable {
     private static final String HELP_TEXT =
         "Please enter comma separated regex"
             + "(e.g. java.util.[A-Z][a-z0-9]*, org.slf4j.Logger)";
+    protected static final String BEAGLE_ID = "Beagle Id";
 
     private JTextField excludeImportsText;
-
     private JTextField sizeText;
     private JTextField distanceText;
     private JTextField esURLText;
+    private JLabel beagleIdValue;
+    private PropertiesComponent propertiesComponent = PropertiesComponent.getInstance();
 
     @Nls
     @Override
@@ -66,8 +68,6 @@ public class SettingsPanel implements Configurable {
                 COLUMN_SPECS,
                 ROW_SPECS);
 
-        PropertiesComponent propertiesComponent = PropertiesComponent.getInstance();
-
         CellConstraints cc = new CellConstraints();
 
         JLabel esURL = new JLabel(ELASTIC_SEARCH_URL);
@@ -84,6 +84,9 @@ public class SettingsPanel implements Configurable {
 
         JLabel helpText = new JLabel(HELP_TEXT);
         helpText.setVisible(true);
+
+        JLabel beagleId = new JLabel(BEAGLE_ID);
+        beagleId.setVisible(true);
 
         esURLText = new JTextField();
         esURLText.setEditable(true);
@@ -117,16 +120,24 @@ public class SettingsPanel implements Configurable {
             excludeImportsText.setText(propertiesComponent.getValue(RefreshAction.
                                        EXCLUDE_IMPORT_LIST));
         }
+
+        beagleIdValue = new JLabel();
+        beagleIdValue.setVisible(true);
+        beagleIdValue.setText(propertiesComponent.getValue(BEAGLE_ID));
+
+
         JPanel jPanel = new JPanel(formLayout);
-        jPanel.add(esURL, cc.xy(1, 3));
-        jPanel.add(esURLText, cc.xy(2, 3));
-        jPanel.add(size, cc.xy(1, 2));
-        jPanel.add(sizeText, cc.xy(2, 2));
-        jPanel.add(distance, cc.xy(1, 1));
-        jPanel.add(distanceText, cc.xy(2, 1));
-        jPanel.add(excludeImports, cc.xy(1, 4));
-        jPanel.add(excludeImportsText, cc.xy(2, 4));
-        jPanel.add(helpText, cc.xy(2, 5));
+        jPanel.add(esURL, cc.xy(1, 4));
+        jPanel.add(esURLText, cc.xy(2, 4));
+        jPanel.add(size, cc.xy(1, 3));
+        jPanel.add(sizeText, cc.xy(2, 3));
+        jPanel.add(distance, cc.xy(1, 2));
+        jPanel.add(distanceText, cc.xy(2, 2));
+        jPanel.add(excludeImports, cc.xy(1, 5));
+        jPanel.add(excludeImportsText, cc.xy(2, 5));
+        jPanel.add(helpText, cc.xy(2, 6));
+        jPanel.add(beagleId, cc.xy(1, 1));
+        jPanel.add(beagleIdValue, cc.xy(2, 1));
 
         return jPanel;
     }
@@ -138,7 +149,6 @@ public class SettingsPanel implements Configurable {
 
     @Override
     public final void apply() {
-        PropertiesComponent propertiesComponent = PropertiesComponent.getInstance();
         String esURLValue = esURLText.getText();
         String sizeValue = sizeText.getText();
         String distanceValue = distanceText.getText();
@@ -152,7 +162,6 @@ public class SettingsPanel implements Configurable {
 
     @Override
     public final void reset() {
-        PropertiesComponent propertiesComponent = PropertiesComponent.getInstance();
         esURLText.setText(propertiesComponent.
                             getValue(RefreshAction.ES_URL,
                                     RefreshAction.ES_URL_DEFAULT));
