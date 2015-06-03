@@ -47,7 +47,7 @@ public class ESUtils {
     private static final String REPOSITORY_SEARCH = "/repository/_search?source=";
     private static final String FAILED_HTTP_ERROR = "Connection Error: ";
     private static final String USER_AGENT = "USER-AGENT";
-    private static final String IDEA_PLUGIN = "Idea-Plugin";
+    private static final String IDEA_PLUGIN = "Idea-Plugin #";
     protected static final String UTF_8 = "UTF-8";
     private static final int HTTP_OK_STATUS = 200;
     private static final String REPO_ID = "repoId";
@@ -127,7 +127,7 @@ public class ESUtils {
             String esGetURL = url + encodedJson;
 
             HttpGet getRequest = new HttpGet(esGetURL);
-            getRequest.setHeader(USER_AGENT, IDEA_PLUGIN);
+            getRequest.setHeader(USER_AGENT, IDEA_PLUGIN + MainWindow.beagleId);
 
             HttpResponse response = httpClient.execute(getRequest);
             if (response.getStatusLine().getStatusCode() != HTTP_OK_STATUS) {

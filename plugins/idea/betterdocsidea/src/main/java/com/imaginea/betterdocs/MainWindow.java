@@ -58,7 +58,7 @@ public class MainWindow implements ToolWindowFactory {
     private WindowEditorOps windowEditorOps = new WindowEditorOps();
     private Editor windowEditor;
     private PropertiesComponent propertiesComponent = PropertiesComponent.getInstance();
-    private String beagleId;
+    protected static String beagleId;
 
     @Override
     public final void createToolWindowContent(final Project project, final ToolWindow toolWindow) {
@@ -72,6 +72,8 @@ public class MainWindow implements ToolWindowFactory {
         if(!propertiesComponent.isValueSet(SettingsPanel.BEAGLE_ID)) {
             beagleId = UUID.randomUUID().toString();
             propertiesComponent.setValue(SettingsPanel.BEAGLE_ID, beagleId);
+        } else {
+            beagleId = propertiesComponent.getValue(SettingsPanel.BEAGLE_ID);
         }
 
         Document document = EditorFactory.getInstance().createDocument("");

@@ -21,6 +21,7 @@ import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.openapi.options.Configurable;
 import com.jgoodies.forms.layout.CellConstraints;
 import com.jgoodies.forms.layout.FormLayout;
+import java.util.UUID;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -123,8 +124,13 @@ public class SettingsPanel implements Configurable {
 
         beagleIdValue = new JLabel();
         beagleIdValue.setVisible(true);
-        beagleIdValue.setText(propertiesComponent.getValue(BEAGLE_ID));
 
+        if(!propertiesComponent.isValueSet(BEAGLE_ID)) {
+            MainWindow.beagleId = UUID.randomUUID().toString();
+            propertiesComponent.setValue(BEAGLE_ID, MainWindow.beagleId);
+        } else {
+            beagleIdValue.setText(propertiesComponent.getValue(BEAGLE_ID));
+        }
 
         JPanel jPanel = new JPanel(formLayout);
         jPanel.add(esURL, cc.xy(1, 4));
