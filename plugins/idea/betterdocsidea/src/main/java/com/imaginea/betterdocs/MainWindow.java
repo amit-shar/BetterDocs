@@ -58,7 +58,7 @@ public class MainWindow implements ToolWindowFactory {
     private WindowEditorOps windowEditorOps = new WindowEditorOps();
     private Editor windowEditor;
     private PropertiesComponent propertiesComponent = PropertiesComponent.getInstance();
-    protected static String beagleId;
+    private WindowObjects windowObjects = WindowObjects.getInstance();
 
     @Override
     public final void createToolWindowContent(final Project project, final ToolWindow toolWindow) {
@@ -70,10 +70,10 @@ public class MainWindow implements ToolWindowFactory {
         jTree.setAutoscrolls(true);
 
         if(!propertiesComponent.isValueSet(SettingsPanel.BEAGLE_ID)) {
-            beagleId = UUID.randomUUID().toString();
-            propertiesComponent.setValue(SettingsPanel.BEAGLE_ID, beagleId);
+            windowObjects.setBeagleId(UUID.randomUUID().toString());
+            propertiesComponent.setValue(SettingsPanel.BEAGLE_ID, windowObjects.getBeagleId());
         } else {
-            beagleId = propertiesComponent.getValue(SettingsPanel.BEAGLE_ID);
+            windowObjects.setBeagleId(propertiesComponent.getValue(SettingsPanel.BEAGLE_ID));
         }
 
         Document document = EditorFactory.getInstance().createDocument("");

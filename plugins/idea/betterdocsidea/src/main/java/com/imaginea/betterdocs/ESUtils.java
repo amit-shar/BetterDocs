@@ -127,7 +127,7 @@ public class ESUtils {
             String esGetURL = url + encodedJson;
 
             HttpGet getRequest = new HttpGet(esGetURL);
-            getRequest.setHeader(USER_AGENT, IDEA_PLUGIN + MainWindow.beagleId);
+            getRequest.setHeader(USER_AGENT, IDEA_PLUGIN + windowObjects.getBeagleId());
 
             HttpResponse response = httpClient.execute(getRequest);
             if (response.getStatusLine().getStatusCode() != HTTP_OK_STATUS) {

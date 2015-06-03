@@ -39,6 +39,15 @@ public final class WindowObjects {
     private Map<String, List<Integer>> fileNameNumbersMap = new HashMap<String, List<Integer>>();
     private Map<String, String> repoStarsMap = new HashMap<String, String>();
     private Map<String, Integer> repoNameIdMap = new HashMap<String, Integer>();
+    private String beagleId;
+
+    public void setBeagleId(String pbeagleId) {
+        this.beagleId = pbeagleId;
+    }
+
+    public String getBeagleId() {
+        return beagleId;
+    }
 
     public JBScrollPane getjTreeScrollPane() {
         return jTreeScrollPane;

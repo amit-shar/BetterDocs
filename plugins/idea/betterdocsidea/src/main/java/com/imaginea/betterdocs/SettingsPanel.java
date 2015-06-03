@@ -48,6 +48,7 @@ public class SettingsPanel implements Configurable {
     private JTextField esURLText;
     private JLabel beagleIdValue;
     private PropertiesComponent propertiesComponent = PropertiesComponent.getInstance();
+    private WindowObjects windowObjects = WindowObjects.getWindowObjects();
 
     @Nls
     @Override
@@ -104,14 +105,14 @@ public class SettingsPanel implements Configurable {
         sizeText.setVisible(true);
 
         sizeText.setText(propertiesComponent.getValue(RefreshAction.SIZE,
-                            String.valueOf(RefreshAction.SIZE_DEFAULT_VALUE)));
+                String.valueOf(RefreshAction.SIZE_DEFAULT_VALUE)));
 
         distanceText = new JTextField();
         distanceText.setEditable(true);
         distanceText.setVisible(true);
 
         distanceText.setText(propertiesComponent.getValue(RefreshAction.DISTANCE,
-                            String.valueOf(RefreshAction.DISTANCE_DEFAULT_VALUE)));
+                String.valueOf(RefreshAction.DISTANCE_DEFAULT_VALUE)));
 
         excludeImportsText = new JTextField();
         excludeImportsText.setEditable(true);
@@ -119,15 +120,15 @@ public class SettingsPanel implements Configurable {
 
         if (propertiesComponent.isValueSet(RefreshAction.EXCLUDE_IMPORT_LIST)) {
             excludeImportsText.setText(propertiesComponent.getValue(RefreshAction.
-                                       EXCLUDE_IMPORT_LIST));
+                    EXCLUDE_IMPORT_LIST));
         }
 
         beagleIdValue = new JLabel();
         beagleIdValue.setVisible(true);
 
         if(!propertiesComponent.isValueSet(BEAGLE_ID)) {
-            MainWindow.beagleId = UUID.randomUUID().toString();
-            propertiesComponent.setValue(BEAGLE_ID, MainWindow.beagleId);
+            windowObjects.setBeagleId(UUID.randomUUID().toString());
+            beagleIdValue.setText(windowObjects.getBeagleId());
         } else {
             beagleIdValue.setText(propertiesComponent.getValue(BEAGLE_ID));
         }
