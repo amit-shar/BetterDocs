@@ -24,6 +24,7 @@ import com.imaginea.betterdocs.action.ExpandProjectTreeAction;
 import com.imaginea.betterdocs.action.RefreshAction;
 import com.imaginea.betterdocs.object.WindowObjects;
 import com.intellij.icons.AllIcons;
+import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.DefaultActionGroup;
 import com.intellij.openapi.editor.Document;
@@ -38,6 +39,7 @@ import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.components.JBTabbedPane;
 import com.intellij.ui.treeStructure.Tree;
 import java.awt.Dimension;
+import java.util.UUID;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JComponent;
@@ -60,15 +62,24 @@ public class MainWindow implements ToolWindowFactory {
     private static final int UNIT_INCREMENT = 16;
     private WindowEditorOps windowEditorOps = new WindowEditorOps();
     private Editor windowEditor;
+    private PropertiesComponent propertiesComponent = PropertiesComponent.getInstance();
 
     @Override
     public final void createToolWindowContent(final Project project, final ToolWindow toolWindow) {
         toolWindow.setIcon(AllIcons.Toolwindows.Documentation);
         DefaultMutableTreeNode root = new DefaultMutableTreeNode(PROJECTS);
+        WindowObjects windowObjects = WindowObjects.getInstance();
 
         JTree jTree = new Tree(root);
         jTree.setRootVisible(false);
         jTree.setAutoscrolls(true);
+
+        if (!propertiesComponent.isValueSet(SettingsPanel.BEAGLE_ID)) {
+            windowObjects.setBeagleId(UUID.randomUUID().toString());
+            propertiesComponent.setValue(SettingsPanel.BEAGLE_ID, windowObjects.getBeagleId());
+        } else {
+            windowObjects.setBeagleId(propertiesComponent.getValue(SettingsPanel.BEAGLE_ID));
+        }
 
         Document document = EditorFactory.getInstance().createDocument("");
         windowEditor = EditorFactory.getInstance().
@@ -79,7 +90,7 @@ public class MainWindow implements ToolWindowFactory {
         EditSettingsAction editSettingsAction = new EditSettingsAction();
         ExpandProjectTreeAction expandProjectTreeAction = new ExpandProjectTreeAction();
         CollapseProjectTreeAction collapseProjectTreeAction = new CollapseProjectTreeAction();
-        WindowObjects windowObjects = WindowObjects.getInstance();
+
 
         windowObjects.setTree(jTree);
         windowObjects.setWindowEditor(windowEditor);
