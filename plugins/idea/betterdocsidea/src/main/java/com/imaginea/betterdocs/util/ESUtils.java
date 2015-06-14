@@ -22,7 +22,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.stream.JsonReader;
-import com.imaginea.betterdocs.action.RefreshAction;
 import com.imaginea.betterdocs.object.WindowObjects;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -40,21 +39,6 @@ import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.DefaultHttpClient;
 
 public class ESUtils {
-    private static final String FILE_CONTENT = "fileContent";
-    private static final String HITS = "hits";
-    private static final String SOURCE = "_source";
-    private static final String FILE = "file";
-    private static final String TOKENS = "tokens";
-    private static final String SOURCEFILE_SEARCH = "/sourcefile/_search?source=";
-    private static final String REPOSITORY_SEARCH = "/repository/_search?source=";
-    private static final String FAILED_HTTP_ERROR = "Connection Error: ";
-    private static final String USER_AGENT = "USER-AGENT";
-    protected static final String UTF_8 = "UTF-8";
-    private static final int HTTP_OK_STATUS = 200;
-    private static final String REPO_ID = "repoId";
-    private static final String STARGAZERS_COUNT = "stargazersCount";
-    private static final String FILE_NAME = "fileName";
-    private static final String UID = "&uid=";
 
     private static WindowObjects windowObjects = WindowObjects.getInstance();
     private JSONUtils jsonUtils = new JSONUtils();
@@ -63,16 +47,16 @@ public class ESUtils {
         String esFileQueryJson = jsonUtils.getJsonForFileContent(fileNames);
         String esFileResultJson;
         esFileResultJson = getESResultJson(esFileQueryJson,
-                windowObjects.getEsURL() + SOURCEFILE_SEARCH);
+                windowObjects.getEsURL() + Constants.SOURCEFILE_SEARCH);
         JsonArray hitsArray = getJsonElements(esFileResultJson);
 
         for (JsonElement hits : hitsArray) {
             JsonObject hitObject = hits.getAsJsonObject();
-            JsonObject sourceObject = hitObject.getAsJsonObject(SOURCE);
+            JsonObject sourceObject = hitObject.getAsJsonObject(Constants.SOURCE);
             //Replacing \r as it's treated as bad end of line character
-            String fileContent = sourceObject.getAsJsonPrimitive(FILE_CONTENT).
+            String fileContent = sourceObject.getAsJsonPrimitive(Constants.FILE_CONTENT).
                     getAsString().replaceAll("\r", "");
-            String fileName = sourceObject.getAsJsonPrimitive(FILE_NAME).getAsString();
+            String fileName = sourceObject.getAsJsonPrimitive(Constants.FILE_NAME).getAsString();
             windowObjects.getFileNameContentsMap().put(fileName, fileContent);
         }
     }
@@ -95,16 +79,16 @@ public class ESUtils {
 
         for (JsonElement hits : hitsArray) {
             JsonObject hitObject = hits.getAsJsonObject();
-            JsonObject sourceObject = hitObject.getAsJsonObject(SOURCE);
-            String fileName = sourceObject.getAsJsonPrimitive(FILE).getAsString();
+            JsonObject sourceObject = hitObject.getAsJsonObject(Constants.SOURCE);
+            String fileName = sourceObject.getAsJsonPrimitive(Constants.FILE).getAsString();
             //Extracting repoIds for future use
-            int repoId = sourceObject.getAsJsonPrimitive(REPO_ID).getAsInt();
+            int repoId = sourceObject.getAsJsonPrimitive(Constants.REPO_ID).getAsInt();
             String project = getProjectName(fileName);
             if (!windowObjects.getRepoNameIdMap().containsKey(project)) {
                 windowObjects.getRepoNameIdMap().put(project, repoId);
             }
 
-            String tokens = sourceObject.get(TOKENS).toString();
+            String tokens = sourceObject.get(Constants.TOKENS).toString();
             fileTokenMap.put(fileName, tokens);
         }
         return fileTokenMap;
@@ -115,8 +99,8 @@ public class ESUtils {
         reader.setLenient(true);
         JsonElement jsonElement = new JsonParser().parse(reader);
         JsonObject jsonObject = jsonElement.getAsJsonObject();
-        JsonObject hitsObject = jsonObject.getAsJsonObject(HITS);
-        return hitsObject.getAsJsonArray(HITS);
+        JsonObject hitsObject = jsonObject.getAsJsonObject(Constants.HITS);
+        return hitsObject.getAsJsonArray(Constants.HITS);
     }
 
 
@@ -124,25 +108,25 @@ public class ESUtils {
         StringBuilder stringBuilder = new StringBuilder();
         try {
             HttpClient httpClient = new DefaultHttpClient();
-            String encodedJson = URLEncoder.encode(esQueryJson, UTF_8);
+            String encodedJson = URLEncoder.encode(esQueryJson, Constants.UTF_8);
 
-            String esGetURL = url + encodedJson + UID + windowObjects.getBeagleId();
+            String esGetURL = url + encodedJson + Constants.UID + windowObjects.getBeagleId();
             String versionInfo = windowObjects.getOsInfo() + "  "
                     + windowObjects.getApplicationVersion() + "  "
                     + windowObjects.getPluginVersion();
 
             HttpGet getRequest = new HttpGet(esGetURL);
-            getRequest.setHeader(USER_AGENT, versionInfo);
+            getRequest.setHeader(Constants.USER_AGENT, versionInfo);
 
             HttpResponse response = httpClient.execute(getRequest);
-            if (response.getStatusLine().getStatusCode() != HTTP_OK_STATUS) {
-                throw new RuntimeException(FAILED_HTTP_ERROR
+            if (response.getStatusLine().getStatusCode() != Constants.HTTP_OK_STATUS) {
+                throw new RuntimeException(Constants.FAILED_HTTP_ERROR
                         + response.getStatusLine().getStatusCode() + "  "
                         + response.getStatusLine().getReasonPhrase());
             }
 
             BufferedReader bufferedReader = new BufferedReader(
-                    new InputStreamReader((response.getEntity().getContent()), UTF_8));
+                    new InputStreamReader((response.getEntity().getContent()), Constants.UTF_8));
             String output;
             while ((output = bufferedReader.readLine()) != null) {
                 stringBuilder.append(output);
@@ -151,16 +135,16 @@ public class ESUtils {
             httpClient.getConnectionManager().shutdown();
         } catch (IllegalStateException e) {
             e.printStackTrace();
-            return RefreshAction.EMPTY_ES_URL;
+            return Constants.EMPTY_ES_URL;
         } catch (MalformedURLException e) {
             e.printStackTrace();
-            return RefreshAction.EMPTY_ES_URL;
+            return Constants.EMPTY_ES_URL;
         } catch (IOException e) {
             e.printStackTrace();
-            return RefreshAction.EMPTY_ES_URL;
+            return Constants.EMPTY_ES_URL;
         } catch (IllegalArgumentException e) {
             e.printStackTrace();
-            return RefreshAction.EMPTY_ES_URL;
+            return Constants.EMPTY_ES_URL;
         }
         return stringBuilder.toString();
     }
@@ -169,13 +153,13 @@ public class ESUtils {
         String repoStarResultJson;
         String stars = null;
         repoStarResultJson = getESResultJson(repoStarsJson,
-                windowObjects.getEsURL() + REPOSITORY_SEARCH);
+                windowObjects.getEsURL() + Constants.REPOSITORY_SEARCH);
         JsonArray hitsArray = getJsonElements(repoStarResultJson);
 
         JsonObject hitObject = hitsArray.get(0).getAsJsonObject();
-        JsonObject sourceObject = hitObject.getAsJsonObject(SOURCE);
+        JsonObject sourceObject = hitObject.getAsJsonObject(Constants.SOURCE);
         //Replacing \r as it's treated as bad end of line character
-        stars = sourceObject.getAsJsonPrimitive(STARGAZERS_COUNT).getAsString();
+        stars = sourceObject.getAsJsonPrimitive(Constants.STARGAZERS_COUNT).getAsString();
         return stars;
     }
 

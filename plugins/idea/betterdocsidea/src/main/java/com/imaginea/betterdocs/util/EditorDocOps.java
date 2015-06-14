@@ -46,7 +46,6 @@ import com.intellij.psi.PsiPackage;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.ui.JBColor;
 import com.intellij.util.containers.ContainerUtil;
-import java.awt.Color;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -66,13 +65,6 @@ import org.jetbrains.annotations.NotNull;
 public class EditorDocOps {
     private WindowObjects windowObjects = WindowObjects.getInstance();
     private WindowEditorOps windowEditorOps = new WindowEditorOps();
-    private static final String JAVA_IO_TMP_DIR = "java.io.tmpdir";
-    private static final Color HIGHLIGHTING_COLOR = new Color(255, 250, 205);
-    public static final char DOT = '.';
-    private static final String IMPORT_LIST = "IMPORT_LIST";
-    private static final String IMPORT_STATEMENT = "IMPORT_STATEMENT";
-    private static final String IMPORT_VALUE = "JAVA_CODE_REFERENCE";
-    private static final String FILE_EXTENSION = "java";
 
     public final Set<String> importsInLines(final Iterable<String> lines,
                                             final Iterable<String> imports) {
@@ -83,7 +75,8 @@ public class EditorDocOps {
             while (stringTokenizer.hasMoreTokens()) {
                 String token = stringTokenizer.nextToken();
                 for (String nextImport : imports) {
-                    String shortImportName = nextImport.substring(nextImport.lastIndexOf(DOT) + 1);
+                    String shortImportName =
+                              nextImport.substring(nextImport.lastIndexOf(Constants.DOT) + 1);
                     if (token.equalsIgnoreCase(shortImportName)) {
                         importsInLines.add(nextImport);
                     }
@@ -142,11 +135,12 @@ public class EditorDocOps {
         if (psiInstance != null && (psiInstance.getPsiFile(document)) != null) {
             PsiFile psiFile = psiInstance.getPsiFile(document);
             if (psiFile != null
-                    && psiFile.getFileType().getDefaultExtension().equals(FILE_EXTENSION)) {
+                    && psiFile.getFileType().
+                    getDefaultExtension().equals(Constants.FILE_EXTENSION)) {
                 PsiElement[] psiRootChildren = psiFile.getChildren();
                 PsiElement element = null;
                 for (PsiElement elem : psiRootChildren) {
-                    if (elem.getNode().getElementType().toString().equals(IMPORT_LIST)) {
+                    if (elem.getNode().getElementType().toString().equals(Constants.IMPORT_LIST)) {
                         element = elem;
                         break;
                     }
@@ -256,7 +250,7 @@ public class EditorDocOps {
     }
 
     public final VirtualFile getVirtualFile(final String fileName, final String contents) {
-        String tempDir = System.getProperty(JAVA_IO_TMP_DIR);
+        String tempDir = System.getProperty(Constants.JAVA_IO_TMP_DIR);
         String filePath = tempDir + "/" + fileName;
         File file = new File(filePath);
         if (!file.exists()) {
@@ -272,7 +266,7 @@ public class EditorDocOps {
         try {
             BufferedWriter bufferedWriter =
                     new BufferedWriter(
-                            new OutputStreamWriter(new FileOutputStream(file), ESUtils.UTF_8));
+                            new OutputStreamWriter(new FileOutputStream(file), Constants.UTF_8));
             bufferedWriter.write(contents);
             bufferedWriter.close();
         } catch (IOException e1) {
@@ -290,7 +284,7 @@ public class EditorDocOps {
         JBColor color = JBColor.GREEN;
         attributes.setEffectColor(color);
         attributes.setEffectType(EffectType.SEARCH_MATCH);
-        attributes.setBackgroundColor(HIGHLIGHTING_COLOR);
+        attributes.setBackgroundColor(Constants.HIGHLIGHTING_COLOR);
 
         Editor projectEditor =
                 FileEditorManager.getInstance(windowObjects.getProject()).getSelectedTextEditor();
@@ -376,11 +370,11 @@ public class EditorDocOps {
         PsiElement[] importListChildren = element.getChildren();
         for (PsiElement importElement : importListChildren) {
             if (importElement.getNode().getElementType().
-                    toString().equals(IMPORT_STATEMENT)) {
+                    toString().equals(Constants.IMPORT_STATEMENT)) {
                 PsiElement[] importsElementList = importElement.getChildren();
                 for (PsiElement importValue : importsElementList) {
                     if (importValue.getNode().getElementType().toString()
-                            .equals(IMPORT_VALUE)) {
+                            .equals(Constants.IMPORT_VALUE)) {
                         imports.add(importValue.getNode().getText());
                     }
                 }

@@ -17,7 +17,6 @@
 
 package com.imaginea.betterdocs.action;
 
-import com.imaginea.betterdocs.ui.SettingsPanel;
 import com.intellij.icons.AllIcons;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
@@ -26,16 +25,14 @@ import com.intellij.openapi.options.ShowSettingsUtil;
 
 public class EditSettingsAction extends AnAction {
 
-    private static final String OPEN_SETTINGS = "Open Settings";
-
     public EditSettingsAction() {
-        super(OPEN_SETTINGS, OPEN_SETTINGS, AllIcons.General.Settings);
+        super(Constants.OPEN_SETTINGS, Constants.OPEN_SETTINGS, AllIcons.General.Settings);
     }
 
     @Override
     public final void actionPerformed(final AnActionEvent anActionEvent) {
         ShowSettingsUtil.getInstance().showSettingsDialog(
                 anActionEvent.getData(PlatformDataKeys.PROJECT_CONTEXT),
-                SettingsPanel.BETTER_DOCS_SETTINGS);
+                Constants.BETTER_DOCS_SETTINGS);
     }
 }
