@@ -151,3 +151,9 @@
 #### 25. [idea] #50 results will be updated on opening plugin window 
 ##### fixes <a href='https://github.com/Imaginea/KodeBeagle/issues/50> #50 </a>
 1. Every time plugin is opened(if previously it's hidden) results get automatically refreshed.
+
+#### 26. [idea] #200 Show correct help message when no imports are present in java file
+##### fixes <a href='https://github.com/Imaginea/BetterDocs/issues/200> #200 </a>
+1. Open BetterDocs plugin, select code from any java file (with no imports present) and hit refresh action.
+2. All pane should have message "Got nothing to search".<br>
+<img src='screenshots/150.png'/>
