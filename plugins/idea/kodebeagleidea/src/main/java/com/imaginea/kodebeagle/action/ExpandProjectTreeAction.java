@@ -25,10 +25,9 @@ import javax.swing.JTree;
 
 public class ExpandProjectTreeAction extends AnAction {
     private WindowObjects windowObjects = WindowObjects.getInstance();
-    private static final String EXPAND_TREE = "Expand Tree";
 
     public ExpandProjectTreeAction() {
-        super(EXPAND_TREE, EXPAND_TREE, AllIcons.General.ExpandAll);
+        super(Constants.EXPAND_TREE, Constants.EXPAND_TREE, AllIcons.General.ExpandAll);
     }
 
     @Override

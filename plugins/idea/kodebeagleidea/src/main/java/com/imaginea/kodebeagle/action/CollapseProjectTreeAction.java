@@ -25,10 +25,9 @@ import javax.swing.JTree;
 
 public class CollapseProjectTreeAction extends AnAction {
     private WindowObjects windowObjects = WindowObjects.getInstance();
-    private static final String COLLAPSE_TREE = "Collapse Tree";
 
     public CollapseProjectTreeAction() {
-        super(COLLAPSE_TREE, COLLAPSE_TREE, AllIcons.General.CollapseAll);
+        super(Constants.COLLAPSE_TREE, Constants.COLLAPSE_TREE, AllIcons.General.CollapseAll);
     }
 
     @Override

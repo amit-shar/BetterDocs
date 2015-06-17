@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+
 package com.imaginea.kodebeagle.action;
 
 import com.imaginea.kodebeagle.model.CodeInfo;
@@ -22,10 +23,10 @@ import com.imaginea.kodebeagle.ui.WrapLayout;
 import com.imaginea.kodebeagle.util.ESUtils;
 import com.imaginea.kodebeagle.util.EditorDocOps;
 import com.imaginea.kodebeagle.util.JSONUtils;
-import com.imaginea.kodebeagle.ui.MainWindow;
 import com.imaginea.kodebeagle.ui.ProjectTree;
 import com.imaginea.kodebeagle.util.WindowEditorOps;
 import com.imaginea.kodebeagle.object.WindowObjects;
+
 import com.intellij.icons.AllIcons;
 import com.intellij.ide.BrowserUtil;
 import com.intellij.ide.DataManager;
@@ -73,54 +74,6 @@ import javax.swing.tree.DefaultTreeModel;
 import org.jetbrains.annotations.NotNull;
 
 public class RefreshAction extends AnAction {
-    private static final String KODE_BEAGLE = "KodeBeagle";
-    public static final String EMPTY_ES_URL =
-            "<html>Elastic Search URL <br> %s <br> in idea settings is incorrect.<br> See "
-                    + "<img src='" + AllIcons.General.Settings + "'/></html>";
-    public static final String ES_URL = "esURL";
-    public static final String DISTANCE = "distance";
-    public static final String SIZE = "size";
-    private static final String KODEBEAGLE_SEARCH = "/kodebeagle/_search?source=";
-    public static final String ES_URL_DEFAULT = "http://labs.imaginea.com/kodebeagle";
-    public static final int DISTANCE_DEFAULT_VALUE = 10;
-    public static final int SIZE_DEFAULT_VALUE = 30;
-    private static final String EDITOR_ERROR = "Could not get any active editor";
-    private static final String FORMAT = "%s %s %s";
-    private static final String QUERYING = "Querying";
-    private static final String FOR = "for";
-    public static final String EXCLUDE_IMPORT_LIST = "Exclude imports";
-    public static final String HELP_MESSAGE =
-            "<html>Got nothing to search. To begin using, "
-                    + "<br /> please select some code and hit <img src='"
-                    + AllIcons.Actions.Refresh + "' /> <br/> "
-                    + "<br/><b>Please Note:</b> We ignore import statements <br/>"
-                    + "while searching - as part of our "
-                    + "internal optimization. <br/> <i>So "
-                    + "selecting import statements has no effect. </i></html>";
-    private static final String QUERY_HELP_MESSAGE =
-            "<html><body> <p> <i><b>We tried querying our servers with : </b></i> <br /> %s </p>"
-                    + "<i><b>but found no results in response.</i></b>"
-                    + "<p> <br/><b>Tip:</b> Try narrowing your selection to fewer lines. "
-                    + "<br/>Alternatively, setup \"Exclude imports\" in settings <img src='"
-                    + AllIcons.General.Settings + "'/> "
-                    + "</p></body></html>";
-    private static final String REPO_SCORE = "Score: ";
-    private static final String BANNER_FORMAT = "%s %s %s";
-    private static final String HTML_U = "<html><u>";
-    private static final String U_HTML = "</u></html>";
-    private static final String FILETYPE_HELP = "<html><center>Currently KodeBeagle supports "
-            + "\"java\" files only.</center></html>";
-    private static final String REPO_BANNER_FORMAT = "%s %s";
-    private static final String GITHUB_LINK = "https://github.com/";
-    private static final String GOTO_GITHUB = "Go to GitHub";
-    private static final String FETCHING_PROJECTS = "Fetching projects...";
-    private static final String FETCHING_FILE_CONTENTS = "Fetching file contents...";
-    private static final String KODEBEAGLE = "Kodebeagle";
-    private static final double INDICATOR_FRACTION = 0.5;
-    public static final int MAX_EDITORS_DEFAULT_VALUE = 10;
-    public static final String MAX_TINY_EDITORS = "maxTinyEditors";
-    private static final String PROJECT_ERROR = "Unable to get Project. Please Try again";
-
     private WindowObjects windowObjects = WindowObjects.getInstance();
     private WindowEditorOps windowEditorOps = new WindowEditorOps();
     private ProjectTree projectTree = new ProjectTree();
@@ -133,7 +86,7 @@ public class RefreshAction extends AnAction {
     private int maxTinyEditors;
 
     public RefreshAction() {
-        super(KODE_BEAGLE, KODE_BEAGLE, AllIcons.Actions.Refresh);
+        super(Constants.KODE_BEAGLE, Constants.KODE_BEAGLE, AllIcons.Actions.Refresh);
     }
 
     @Override
@@ -168,13 +121,13 @@ public class RefreshAction extends AnAction {
                     ProgressManager.getInstance().run(new QueryBDServerTask(importsInLines,
                             finalImports, jTree, model, root, notification));
                 } else {
-                    showHelpInfo(HELP_MESSAGE);
+                    showHelpInfo(Constants.HELP_MESSAGE);
                 }
             } else {
-                showHelpInfo(FILETYPE_HELP);
+                showHelpInfo(Constants.FILETYPE_HELP);
             }
         } else {
-            showHelpInfo(EDITOR_ERROR);
+            showHelpInfo(Constants.EDITOR_ERROR);
         }
     }
 
@@ -189,14 +142,14 @@ public class RefreshAction extends AnAction {
     private Map<String, ArrayList<CodeInfo>> doBackEndWork(final Set<String> importsInLines,
                                                            final Set<String> finalImports,
                                                            final ProgressIndicator indicator) {
-        indicator.setText(FETCHING_PROJECTS);
+        indicator.setText(Constants.FETCHING_PROJECTS);
         String esResultJson = getESQueryResultJson(importsInLines);
         Map<String, ArrayList<CodeInfo>> projectNodes = new HashMap<String, ArrayList<CodeInfo>>();
-        if (!esResultJson.equals(EMPTY_ES_URL)) {
+        if (!esResultJson.equals(Constants.EMPTY_ES_URL)) {
             projectNodes = getProjectNodes(finalImports, esResultJson);
-            indicator.setFraction(INDICATOR_FRACTION);
+            indicator.setFraction(Constants.INDICATOR_FRACTION);
             if (!projectNodes.isEmpty()) {
-                indicator.setText(FETCHING_FILE_CONTENTS);
+                indicator.setText(Constants.FETCHING_FILE_CONTENTS);
                 codePaneTinyEditorsInfoList = getCodePaneTinyEditorsInfoList(projectNodes);
                 List<String> fileNamesList =
                         getFileNamesListForTinyEditors(codePaneTinyEditorsInfoList);
@@ -230,7 +183,8 @@ public class RefreshAction extends AnAction {
     private String getESQueryResultJson(final Set<String> importsInLines) {
         String esQueryJson = jsonUtils.getESQueryJson(importsInLines, windowObjects.getSize());
         String esQueryResultJson =
-            esUtils.getESResultJson(esQueryJson, windowObjects.getEsURL() + KODEBEAGLE_SEARCH);
+            esUtils.getESResultJson(esQueryJson, windowObjects.getEsURL()
+                    + Constants.KODEBEAGLE_SEARCH);
         return esQueryResultJson;
     }
 
@@ -258,7 +212,7 @@ public class RefreshAction extends AnAction {
         tinyEditorDoc.setReadOnly(true);
         Project project = windowObjects.getProject();
         FileType fileType =
-                FileTypeManager.getInstance().getFileTypeByExtension(MainWindow.JAVA);
+                FileTypeManager.getInstance().getFileTypeByExtension(Constants.JAVA);
 
         Editor tinyEditor =
                 EditorFactory.getInstance().
@@ -279,23 +233,24 @@ public class RefreshAction extends AnAction {
             windowObjects.getRepoStarsMap().put(projectName, stars);
         }
 
-        JLabel infoLabel = new JLabel(String.format(REPO_BANNER_FORMAT, REPO_SCORE, stars));
+        JLabel infoLabel = new JLabel(String.format(Constants.REPO_BANNER_FORMAT,
+                                          Constants.REPO_SCORE, stars));
 
-        final JLabel expandLabel =
-                new JLabel(String.format(BANNER_FORMAT, HTML_U, displayFileName, U_HTML));
+        final JLabel expandLabel = new JLabel(String.format(Constants.BANNER_FORMAT,
+                                    Constants.HTML_U, displayFileName, Constants.U_HTML));
         expandLabel.setForeground(JBColor.BLUE);
         expandLabel.addMouseListener(
                 new CodePaneTinyEditorExpandLabelMouseListener(displayFileName, fileName));
         expandPanel.add(expandLabel);
 
-        final JLabel projectNameLabel =
-                new JLabel(String.format(BANNER_FORMAT, HTML_U, projectName, U_HTML));
+        final JLabel projectNameLabel = new JLabel(String.format(Constants.BANNER_FORMAT,
+                                           Constants.HTML_U, projectName, Constants.U_HTML));
         projectNameLabel.setForeground(JBColor.blue);
-        projectNameLabel.setToolTipText(GOTO_GITHUB);
+        projectNameLabel.setToolTipText(Constants.GOTO_GITHUB);
         projectNameLabel.addMouseListener(new MouseAdapter() {
             public void mouseClicked(final MouseEvent me) {
                 if (!projectName.isEmpty()) {
-                    BrowserUtil.browse(GITHUB_LINK + projectName);
+                    BrowserUtil.browse(Constants.GITHUB_LINK + projectName);
                 }
             }
         });
@@ -352,8 +307,8 @@ public class RefreshAction extends AnAction {
                 editorDocOps.getImports(document, windowObjects.getProject());
 
         if (!imports.isEmpty()) {
-            if (propertiesComponent.isValueSet(EXCLUDE_IMPORT_LIST)) {
-                String excludeImport = propertiesComponent.getValue(EXCLUDE_IMPORT_LIST);
+            if (propertiesComponent.isValueSet(Constants.EXCLUDE_IMPORT_LIST)) {
+                String excludeImport = propertiesComponent.getValue(Constants.EXCLUDE_IMPORT_LIST);
                 if (excludeImport != null) {
                     imports = editorDocOps.excludeConfiguredImports(imports, excludeImport);
                 }
@@ -384,15 +339,17 @@ public class RefreshAction extends AnAction {
         if (project != null) {
             windowObjects.setProject(project);
             windowObjects.setDistance(propertiesComponent.
-                    getOrInitInt(DISTANCE, DISTANCE_DEFAULT_VALUE));
-            windowObjects.setSize(propertiesComponent.getOrInitInt(SIZE, SIZE_DEFAULT_VALUE));
-            windowObjects.setEsURL(propertiesComponent.getValue(ES_URL, ES_URL_DEFAULT));
-            maxTinyEditors =
-                    propertiesComponent.getOrInitInt(MAX_TINY_EDITORS, MAX_EDITORS_DEFAULT_VALUE);
+                    getOrInitInt(Constants.DISTANCE, Constants.DISTANCE_DEFAULT_VALUE));
+            windowObjects.setSize(propertiesComponent.
+                                    getOrInitInt(Constants.SIZE, Constants.SIZE_DEFAULT_VALUE));
+            windowObjects.setEsURL(propertiesComponent.
+                                    getValue(Constants.ES_URL, Constants.ES_URL_DEFAULT));
+            maxTinyEditors = propertiesComponent.getOrInitInt(Constants.MAX_TINY_EDITORS,
+                                                       Constants.MAX_EDITORS_DEFAULT_VALUE);
             windowEditorOps.writeToDocument("", windowObjects.getWindowEditor().getDocument());
             runAction();
         } else {
-            showHelpInfo(PROJECT_ERROR);
+            showHelpInfo(Constants.PROJECT_ERROR);
             goToAllPane();
         }
     }
@@ -409,9 +366,9 @@ public class RefreshAction extends AnAction {
     }
 
     private Notification showQueryTokensNotification(final Set<String> importsInLines) {
-        final Notification notification = new Notification(KODE_BEAGLE,
-                String.format(FORMAT, QUERYING,
-                        windowObjects.getEsURL(), FOR),
+        final Notification notification = new Notification(Constants.KODE_BEAGLE,
+                String.format(Constants.FORMAT, Constants.QUERYING,
+                        windowObjects.getEsURL(), Constants.FOR),
                 importsInLines.toString(),
                 NotificationType.INFORMATION);
         Notifications.Bus.notify(notification);
@@ -458,7 +415,7 @@ public class RefreshAction extends AnAction {
         QueryBDServerTask(final Set<String> pImportsInLines, final Set<String> pFinalImports,
                           final JTree pJTree, final DefaultTreeModel pModel,
                           final DefaultMutableTreeNode pRoot, final Notification pNotification) {
-            super(windowObjects.getProject(), KODEBEAGLE, true,
+            super(windowObjects.getProject(), Constants.KODEBEAGLE, true,
                     PerformInBackgroundOption.ALWAYS_BACKGROUND);
             this.importsInLines = pImportsInLines;
             this.finalImports = pFinalImports;
@@ -491,7 +448,7 @@ public class RefreshAction extends AnAction {
                         rte.printStackTrace();
                     }
                 } else {
-                    showHelpInfo(String.format(QUERY_HELP_MESSAGE,
+                    showHelpInfo(String.format(Constants.QUERY_HELP_MESSAGE,
                             importsInLines.toString().replaceAll(",", "<br/>")));
                     jTree.updateUI();
                     notification.expire();

@@ -33,14 +33,6 @@ import java.util.List;
 import java.util.Set;
 
 public class JSONUtils {
-    private static final String CUSTOM_TOKENS_IMPORT_NAME = "custom.tokens.importName";
-    private static final String IMPORT_NAME = "importName";
-    private static final String LINE_NUMBERS = "lineNumbers";
-    private static final String SORT_ORDER = "desc";
-    private static final String ID = "id";
-    private static final String TYPEREPOSITORY_ID = "typerepository.id";
-    private static final String TYPESOURCEFILENAME_FILENAME = "typesourcefile.fileName";
-    private static final String FILE_NAME = "fileName";
 
     public final String getJsonForFileContent(final List<String> fileNameList) {
         ESFileContent esFileContent = new ESFileContent();
@@ -60,7 +52,8 @@ public class JSONUtils {
         }
 
         Gson gson = new Gson();
-        return gson.toJson(esFileContent).replaceAll(FILE_NAME, TYPESOURCEFILENAME_FILENAME);
+        return gson.toJson(esFileContent).replaceAll(Constants.FILE_NAME,
+                Constants.TYPESOURCEFILENAME_FILENAME);
     }
 
     public final String getRepoStarsJSON(final int repoId) {
@@ -91,7 +84,7 @@ public class JSONUtils {
         mustList.add(must);
 
         Gson gson = new Gson();
-        return gson.toJson(repoStarsJSON).replaceAll(ID, TYPEREPOSITORY_ID);
+        return gson.toJson(repoStarsJSON).replaceAll(Constants.ID, Constants.TYPEREPOSITORY_ID);
     }
 
     public final String getESQueryJson(final Set<String> importsInLines, final int size) {
@@ -106,7 +99,7 @@ public class JSONUtils {
         ESQuery.Sort sort = new ESQuery.Sort();
 
         ESQuery.Score score = new ESQuery.Score();
-        score.setOrder(SORT_ORDER);
+        score.setOrder(Constants.SORT_ORDER);
 
         sort.setScore(score);
 
@@ -133,7 +126,8 @@ public class JSONUtils {
         }
 
         Gson gson = new Gson();
-        return gson.toJson(esQuery).replaceAll(IMPORT_NAME, CUSTOM_TOKENS_IMPORT_NAME);
+        return gson.toJson(esQuery).replaceAll(Constants.IMPORT_NAME,
+                Constants.CUSTOM_TOKENS_IMPORT_NAME);
     }
 
     public final List<Integer> getLineNumbers(final Collection<String> imports,
@@ -145,9 +139,9 @@ public class JSONUtils {
 
         for (JsonElement token : tokensArray) {
             JsonObject jObject = token.getAsJsonObject();
-            String importName = jObject.getAsJsonPrimitive(IMPORT_NAME).getAsString();
+            String importName = jObject.getAsJsonPrimitive(Constants.IMPORT_NAME).getAsString();
             if (imports.contains(importName)) {
-                JsonArray lineNumbersArray = jObject.getAsJsonArray(LINE_NUMBERS);
+                JsonArray lineNumbersArray = jObject.getAsJsonArray(Constants.LINE_NUMBERS);
                 for (JsonElement lineNumber : lineNumbersArray) {
                     lineNumbers.add(lineNumber.getAsInt());
                 }

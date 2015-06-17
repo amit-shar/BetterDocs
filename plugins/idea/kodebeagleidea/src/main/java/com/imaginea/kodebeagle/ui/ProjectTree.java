@@ -61,20 +61,15 @@ import javax.swing.tree.TreeCellRenderer;
 import javax.swing.tree.TreeNode;
 
 public class ProjectTree {
-    private static final String OPEN_IN_NEW_TAB = "Open in New Tab";
     private WindowObjects windowObjects = WindowObjects.getInstance();
     private WindowEditorOps windowEditorOps = new WindowEditorOps();
     private ESUtils esUtils = new ESUtils();
     private JSONUtils jsonUtils = new JSONUtils();
     private EditorDocOps editorDocOps = new EditorDocOps();
-    private static final String GITHUB_LINK = "https://github.com/";
-    private static final String GITHUB_ICON = "icons/github_icon.png";
-    private static final String RIGHT_CLICK_MENU_ITEM_TEXT =
-            "<html><img src='%s'/>Go to GitHub";
 
     protected final URL getIconURL() {
         ClassLoader classLoader = this.getClass().getClassLoader();
-        return classLoader.getResource(GITHUB_ICON);
+        return classLoader.getResource(Constants.GITHUB_ICON);
     }
 
     public final TreeSelectionListener getTreeSelectionListener(final TreeNode root) {
@@ -165,17 +160,17 @@ public class ProjectTree {
                         final CodeInfo codeInfo = (CodeInfo) selectedNode.getUserObject();
 
                         menu.add(new JMenuItem(addOpenInNewTabMenuItem(codeInfo))).
-                                setText(OPEN_IN_NEW_TAB);
+                                setText(Constants.OPEN_IN_NEW_TAB);
                     }
 
                     menu.add(new JMenuItem(new AbstractAction() {
                         @Override
                         public void actionPerformed(final ActionEvent actionEvent) {
                             if (!gitUrl.isEmpty()) {
-                                BrowserUtil.browse(GITHUB_LINK + gitUrl);
+                                BrowserUtil.browse(Constants.GITHUB_LINK + gitUrl);
                             }
                         }
-                    })).setText(String.format(RIGHT_CLICK_MENU_ITEM_TEXT, getIconURL()));
+                    })).setText(String.format(Constants.RIGHT_CLICK_MENU_ITEM_TEXT, getIconURL()));
 
                     menu.show(mouseEvent.getComponent(), mouseEvent.getX(), mouseEvent.getY());
                 }
@@ -215,21 +210,18 @@ public class ProjectTree {
     }
 
     private class FetchFileContentTask extends Task.Backgroundable {
-
-        private static final String KODE_BEAGLE = "KodeBeagle";
-        private static final String FETCHING_FILE_CONTENT = "Fetching file content ...";
         private final CodeInfo codeInfo;
         private String fileContents;
 
         public FetchFileContentTask(final CodeInfo pCodeInfo) {
             super(windowObjects.getProject(),
-                    KODE_BEAGLE, true, PerformInBackgroundOption.ALWAYS_BACKGROUND);
+                    Constants.KODE_BEAGLE, true, PerformInBackgroundOption.ALWAYS_BACKGROUND);
             this.codeInfo = pCodeInfo;
         }
 
         @Override
         public void run(@NotNull final ProgressIndicator indicator) {
-            indicator.setText(FETCHING_FILE_CONTENT);
+            indicator.setText(Constants.FETCHING_FILE_CONTENT);
             indicator.setFraction(0.0);
             String fileName = codeInfo.getFileName();
             fileContents = esUtils.getContentsForFile(fileName);
@@ -251,7 +243,6 @@ public class ProjectTree {
 }
 
 class JTreeCellRenderer implements TreeCellRenderer {
-    private static final String REPO_STARS = "Repo Stars: ";
     private WindowObjects windowObjects = WindowObjects.getInstance();
     private ESUtils esUtils = new ESUtils();
     private ProjectTree projectTree = new ProjectTree();
@@ -269,7 +260,7 @@ class JTreeCellRenderer implements TreeCellRenderer {
                     String repoName = ((DefaultMutableTreeNode) value).getUserObject().toString();
                     int repoId = windowObjects.getRepoNameIdMap().get(repoName);
                     String stars = esUtils.extractRepoStars(repoName, repoId);
-                    renderer.setToolTipText(REPO_STARS + stars);
+                    renderer.setToolTipText(Constants.REPO_STARS + stars);
                     renderer.setIcon(new ImageIcon(projectTree.getIconURL()));
                 } else {
                     renderer.setIcon(null);
