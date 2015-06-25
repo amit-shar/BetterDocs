@@ -18,6 +18,7 @@
 package com.imaginea.kodebeagle.util;
 
 import com.imaginea.kodebeagle.object.WindowObjects;
+import com.intellij.lang.ASTNode;
 import com.intellij.openapi.editor.CaretModel;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
@@ -37,13 +38,24 @@ import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.JavaDirectoryService;
+import com.intellij.psi.JavaRecursiveElementVisitor;
 import com.intellij.psi.PsiDirectory;
 import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
+import com.intellij.psi.PsiImportList;
+import com.intellij.psi.PsiImportStatementBase;
 import com.intellij.psi.PsiJavaFile;
 import com.intellij.psi.PsiManager;
+import com.intellij.psi.PsiMethod;
+import com.intellij.psi.PsiMethodCallExpression;
 import com.intellij.psi.PsiPackage;
+import com.intellij.psi.PsiParameter;
+import com.intellij.psi.PsiReferenceExpression;
+import com.intellij.psi.PsiType;
+import com.intellij.psi.PsiVariable;
+import com.intellij.psi.impl.source.PsiFieldImpl;
+import com.intellij.psi.impl.source.tree.JavaElementType;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.ui.JBColor;
 import com.intellij.util.containers.ContainerUtil;
@@ -70,12 +82,9 @@ public class EditorDocOps {
     private static final String JAVA_IO_TMP_DIR = "java.io.tmpdir";
     private static final Color HIGHLIGHTING_COLOR = new Color(255, 250, 205);
     public static final char DOT = '.';
-    private static final String IMPORT_LIST = "IMPORT_LIST";
-    private static final String IMPORT_STATEMENT = "IMPORT_STATEMENT";
-    private static final String IMPORT_VALUE = "JAVA_CODE_REFERENCE";
-    private static final String FILE_EXTENSION = "java";
+    final String REGEX = "(\\s*(import|\\/?\\*|//)\\s+.*)|\\\".*";
 
-    public final Set<String> importsInLines(final Iterable<String> lines,
+   /* public final Set<String> importsInLines(final Iterable<String> lines,
                                             final Iterable<String> imports) {
         Set<String> importsInLines = new HashSet<String>();
 
@@ -92,15 +101,16 @@ public class EditorDocOps {
             }
         }
         return importsInLines;
-    }
+    }*/
 
-    public final Set<String> getLines(final Editor projectEditor, final int distance) {
-        Set<String> lines = new HashSet<String>();
+    public final Set<String> getImportsInLines(final Editor projectEditor, final int distance) {
+        Set<String> importInLines = new HashSet<String>();
         Document document = projectEditor.getDocument();
-        String regex = "(\\s*(import|\\/?\\*|//)\\s+.*)|\\\".*";
         SelectionModel selectionModel = projectEditor.getSelectionModel();
         int head = 0;
         int tail = document.getLineCount() - 1;
+        int start;
+        int end;
 
         if (selectionModel.hasSelection()) {
             head = document.getLineNumber(selectionModel.getSelectionStart());
@@ -110,6 +120,8 @@ public class EditorDocOps {
             if ((document.getLineStartOffset(tail) == selectionModel.getSelectionEnd())) {
                 tail--;
             }
+            start = selectionModel.getSelectionStart();
+            end = selectionModel.getSelectionEnd();
 
         } else {
             int currentLine = document.getLineNumber(projectEditor.getCaretModel().getOffset());
@@ -121,44 +133,56 @@ public class EditorDocOps {
             if (currentLine + distance <= document.getLineCount() - 1) {
                 tail = currentLine + distance;
             }
+            start = document.getLineStartOffset(head);
+            end = document.getLineEndOffset(tail);
         }
+
+        PsiDocumentManager psiInstance = PsiDocumentManager.getInstance(windowObjects.getProject());
+        PsiJavaFile psiJavaFile = (PsiJavaFile) psiInstance.getPsiFile(projectEditor.getDocument());
 
         for (int j = head; j <= tail; j++) {
             String line =
                     document.getCharsSequence().subSequence(document.getLineStartOffset(j),
                             document.getLineEndOffset(j)).toString();
-            String cleanedLine = line.replaceFirst(regex, "").replaceAll("\\W+", " ").trim();
-            if (!cleanedLine.isEmpty()) {
-                lines.add(cleanedLine);
-            }
-        }
-        return lines;
-    }
+            String cleanedLine = line.replaceFirst(REGEX, "").replaceAll("\\W+", " ").trim();
 
-    public final Set<String> getImports(@NotNull final Document document,
-                                        @NotNull final Project project) {
-        PsiDocumentManager psiInstance = PsiDocumentManager.getInstance(project);
-        Set<String> imports = new HashSet<String>();
-
-        if (psiInstance != null && (psiInstance.getPsiFile(document)) != null) {
-            PsiFile psiFile = psiInstance.getPsiFile(document);
-            if (psiFile != null
-                    && psiFile.getFileType().getDefaultExtension().equals(FILE_EXTENSION)) {
-                PsiElement[] psiRootChildren = psiFile.getChildren();
-                PsiElement element = null;
-                for (PsiElement elem : psiRootChildren) {
-                    if (elem.getNode().getElementType().toString().equals(IMPORT_LIST)) {
-                        element = elem;
-                        break;
+            if (!cleanedLine.isEmpty() || start < end) {
+                if (psiJavaFile != null && psiJavaFile.findElementAt(start) != null) {
+                    PsiElement psiElement = psiJavaFile.findElementAt(start);
+                    if (psiElement != null) {
+                        importInLines.addAll(getImportsInMethodScope(psiElement.getParent(), cleanedLine));
+                        importInLines.addAll(getImportsInClassScope(psiElement.getParent(), cleanedLine));
+                        // todo : if method variables and class fields have same name then resolve them.
                     }
                 }
-                if (element != null) {
-                    imports = getImportsSet(element);
+                start++;
+            }
+        }
+        System.out.println(importInLines);
+        return importInLines;
+    }
+
+    public final Set<String> getImports(@NotNull final Document document) {
+        PsiDocumentManager psiInstance = PsiDocumentManager.getInstance(windowObjects.getProject());
+        Set<String> imports = new HashSet<String>();
+        if (psiInstance != null && (psiInstance.getPsiFile(document)) != null) {
+            PsiFile psiFile = psiInstance.getPsiFile(document);
+            if (psiFile instanceof PsiJavaFile) {
+                PsiJavaFile psiJavaFile = (PsiJavaFile)psiFile;
+                psiJavaFile.getSingleClassImports(true);
+                PsiImportList psiImportList = psiJavaFile.getImportList();
+                if (psiImportList != null) {
+                    PsiImportStatementBase[] importStatements = psiImportList.getAllImportStatements();
+                    for(PsiImportStatementBase psiImportStatementBase : importStatements) {
+                        if (psiImportStatementBase.getImportReference() != null)
+                            imports.add(psiImportStatementBase.getImportReference().getCanonicalText());
+                    }
                 }
             }
         }
         return imports;
     }
+
 
     public final Set<String> getInternalImports(@NotNull final Project project) {
         final Set<String> internalImports = new HashSet<String>();
@@ -372,24 +396,6 @@ public class EditorDocOps {
         return stringBuilder.toString();
     }
 
-    private Set<String> getImportsSet(final PsiElement element) {
-        Set<String> imports = new HashSet<String>();
-        PsiElement[] importListChildren = element.getChildren();
-        for (PsiElement importElement : importListChildren) {
-            if (importElement.getNode().getElementType().
-                    toString().equals(IMPORT_STATEMENT)) {
-                PsiElement[] importsElementList = importElement.getChildren();
-                for (PsiElement importValue : importsElementList) {
-                    if (importValue.getNode().getElementType().toString()
-                            .equals(IMPORT_VALUE)) {
-                        imports.add(importValue.getNode().getText());
-                    }
-                }
-            }
-        }
-        return imports;
-    }
-
     public final boolean isJavaFile(final Document document) {
         PsiDocumentManager psiInstance = PsiDocumentManager.getInstance(windowObjects.getProject());
         if (psiInstance != null && (psiInstance.getPsiFile(document)) != null) {
@@ -400,4 +406,146 @@ public class EditorDocOps {
         }
         return false;
     }
+
+    public final Set<String> getImportsInMethodScope(PsiElement element, final String cleanedLine) {
+
+        //final Map<String, String> nameVsTypeMap = new HashMap<String, String>();
+        final Set<String> imports = new HashSet<String>();
+        PsiElement elem = element;
+        while(elem != null && elem.getNode() != null && elem.getNode().getElementType() != null
+                && !elem.getNode().getElementType().equals(JavaElementType.METHOD)){
+            elem=elem.getParent();
+        }
+
+
+        if(elem!=null && elem.getNode()!=null && elem.getNode().getElementType() != null
+                && elem.getNode().getElementType().equals(JavaElementType.METHOD)) {
+            PsiMethod psiMethod = (PsiMethod) elem;
+            //String methodName = psiMethod.getName();
+
+            imports.addAll(getImportsInMethodParameters(cleanedLine, psiMethod));
+
+            psiMethod.acceptChildren(new JavaRecursiveElementVisitor() {
+                @Override
+                public void visitMethodCallExpression(PsiMethodCallExpression methodCall) {
+                    String type = visitMethodCallExpressionUtil(methodCall, cleanedLine);
+                    if (type !=null && type != "")
+                        imports.add(type);
+                }
+
+                @Override
+                public void visitVariable(PsiVariable variable) {
+                    imports.addAll(visitVariableUtil(variable, cleanedLine)); // was passing nameVsTypeMap
+                }
+            });
+            // nameVsTypeMapInMethodScope.put(methodName, nameVsTypeMap);
+        }
+        return imports;
+    }
+
+    private Set<String> getImportsInMethodParameters(String cleanedLine, PsiMethod psiMethod) {
+        Set<String> imports = new HashSet<String>();
+        PsiParameter[] params = psiMethod.getParameterList().getParameters();
+        if (params != null && params.length > 0) {
+            for (PsiParameter p : params) {
+                String type = p.getType().getCanonicalText();
+                if(type.contains("<")){
+                    type = type.substring(0, type.indexOf("<"));
+                }
+                if (cleanedLine.contains(p.getName())) {
+                    imports.add(type);
+                }
+            }
+        }
+        return imports;
+    }
+
+    private Set<String> visitVariableUtil(PsiVariable variable, String cleanedLine) {
+        Set<String> imports = new HashSet<String>();
+        String type = variable.getType().getCanonicalText();
+        //todo :ignore primitives types
+        if (type != null) {
+            if (type.contains("<")) {
+                type = type.substring(0, type.indexOf("<"));
+            }
+            if (cleanedLine.contains(" " + variable.getName() + " ") || cleanedLine.contains(variable.getName())) {
+                //nameVsTypeMap.put(variable.getName(), type);
+                if(variable.getInitializer() !=null && variable.getInitializer().getType() != null) {
+                    String variableInitializer = variable.getInitializer().getType().getCanonicalText();
+                    if (variableInitializer.contains("<")) {
+                        variableInitializer = variableInitializer.substring(0, variableInitializer.indexOf("<"));
+                    }
+                    imports.add(variableInitializer);
+                }
+                imports.add(type);
+            }
+        }
+        return imports;
+    }
+
+    private String visitMethodCallExpressionUtil(PsiMethodCallExpression methodCall, String cleanedLine) {
+        String noType="";
+        PsiReferenceExpression methodExpr = methodCall.getMethodExpression();
+        if (methodExpr != null && methodExpr.getQualifierExpression() != null) {
+            String name = methodExpr.getQualifierExpression().getText();
+            PsiType psiType = methodExpr.getQualifierExpression().getType();
+            if (name != null && psiType != null) {
+                String type= psiType.getCanonicalText();
+                if (cleanedLine.contains(name.replaceFirst(REGEX, "").replaceAll("\\W+", " ").trim())) {
+                    if (type.contains("<")) {
+                        type = type.substring(0, type.indexOf("<"));
+                        return type;
+                    }
+                }
+            }
+        }
+        return noType;
+    }
+
+    public final Set<String> getImportsInClassScope(PsiElement elem, String cleanedLine) {
+        Set<String> imports = new HashSet<String>();
+        while(elem != null && elem.getNode() != null && elem.getNode().getElementType() != null
+                && !elem.getNode().getElementType().equals(JavaElementType.CLASS)){
+            elem=elem.getParent();
+        }
+
+        if(elem != null && elem.getNode() != null && elem.getNode().getElementType() != null &&
+                elem.getNode().getElementType().equals(JavaElementType.CLASS)) {
+            ASTNode node = elem.getNode();
+            PsiElement[] children = node.getPsi().getChildren();
+            if (children != null && children.length > 0) {
+                imports.addAll(getImportsInClassFields(cleanedLine, children));
+            }
+        }
+        return imports;
+    }
+
+    private Set<String> getImportsInClassFields(String cleanedLine, PsiElement[] children) {
+        Set<String> imports = new HashSet<String>();
+        for (PsiElement child : children) {
+            if (child.getNode().getElementType().equals(JavaElementType.FIELD)) {
+                PsiFieldImpl psiField = (PsiFieldImpl) child;
+                //todo :ignore primitives types
+                if (cleanedLine.contains(" " + psiField.getName())) {
+                    String type = psiField.getType().getCanonicalText();
+                    if (type != null) {
+                        if (type.contains("<")) {
+                            type = type.substring(0, type.indexOf("<"));
+                        }
+                        if (psiField.getInitializer() != null && psiField.getInitializer().getType() != null) {
+                            String psiFieldInitializer = psiField.getInitializer().getType().getCanonicalText();
+                            if (psiFieldInitializer.contains("<")) {
+                                psiFieldInitializer = psiFieldInitializer.substring(0, psiFieldInitializer.indexOf("<"));
+                            }
+                            imports.add(psiFieldInitializer);
+                        }
+                        imports.add(type);
+                    }
+                }
+            }
+        }
+        return imports;
+    }
+
+
 }

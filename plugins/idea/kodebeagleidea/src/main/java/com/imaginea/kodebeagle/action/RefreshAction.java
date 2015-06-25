@@ -351,7 +351,7 @@ public class RefreshAction extends AnAction {
 
     private Set<String> getFinalImports(final Document document) {
         Set<String> imports =
-                editorDocOps.getImports(document, windowObjects.getProject());
+                editorDocOps.getImports(document);
 
         if (!imports.isEmpty()) {
             if (propertiesComponent.isValueSet(EXCLUDE_IMPORT_LIST)) {
@@ -371,8 +371,8 @@ public class RefreshAction extends AnAction {
 
     private Set<String> getImportsInLines(final Editor projectEditor,
                                           final Set<String> externalImports) {
-        Set<String> lines = editorDocOps.getLines(projectEditor, windowObjects.getDistance());
-        Set<String> importsInLines = editorDocOps.importsInLines(lines, externalImports);
+        Set<String> importsInLines = editorDocOps.getImportsInLines(projectEditor, windowObjects.getDistance());
+        //Set<String> importsInLines = editorDocOps.importsInLines(lines, externalImports);
         return importsInLines;
     }
 
