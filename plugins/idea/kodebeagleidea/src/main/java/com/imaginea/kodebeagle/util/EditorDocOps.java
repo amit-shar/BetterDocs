@@ -37,23 +37,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.psi.JavaDirectoryService;
-import com.intellij.psi.JavaRecursiveElementVisitor;
-import com.intellij.psi.PsiDirectory;
-import com.intellij.psi.PsiDocumentManager;
-import com.intellij.psi.PsiElement;
-import com.intellij.psi.PsiFile;
-import com.intellij.psi.PsiImportList;
-import com.intellij.psi.PsiImportStatementBase;
-import com.intellij.psi.PsiJavaFile;
-import com.intellij.psi.PsiManager;
-import com.intellij.psi.PsiMethod;
-import com.intellij.psi.PsiMethodCallExpression;
-import com.intellij.psi.PsiPackage;
-import com.intellij.psi.PsiParameter;
-import com.intellij.psi.PsiReferenceExpression;
-import com.intellij.psi.PsiType;
-import com.intellij.psi.PsiVariable;
+import com.intellij.psi.*;
 import com.intellij.psi.impl.source.PsiFieldImpl;
 import com.intellij.psi.impl.source.tree.JavaElementType;
 import com.intellij.psi.search.GlobalSearchScope;
@@ -65,12 +49,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.StringTokenizer;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -146,19 +125,19 @@ public class EditorDocOps {
                             document.getLineEndOffset(j)).toString();
             String cleanedLine = line.replaceFirst(REGEX, "").replaceAll("\\W+", " ").trim();
 
-            if (!cleanedLine.isEmpty() || start < end) {
+            if (!cleanedLine.isEmpty() && start < end) {
                 if (psiJavaFile != null && psiJavaFile.findElementAt(start) != null) {
                     PsiElement psiElement = psiJavaFile.findElementAt(start);
                     if (psiElement != null) {
                         importInLines.addAll(getImportsInMethodScope(psiElement.getParent(), cleanedLine));
                         importInLines.addAll(getImportsInClassScope(psiElement.getParent(), cleanedLine));
-                        // todo : if method variables and class fields have same name then resolve them.
                     }
                 }
                 start++;
             }
         }
         System.out.println(importInLines);
+        nameVsTypeMap.clear();
         return importInLines;
     }
 
@@ -407,16 +386,14 @@ public class EditorDocOps {
         return false;
     }
 
+    Map<String, String> nameVsTypeMap = new HashMap<String, String>();
     public final Set<String> getImportsInMethodScope(PsiElement element, final String cleanedLine) {
-
-        //final Map<String, String> nameVsTypeMap = new HashMap<String, String>();
         final Set<String> imports = new HashSet<String>();
         PsiElement elem = element;
         while(elem != null && elem.getNode() != null && elem.getNode().getElementType() != null
                 && !elem.getNode().getElementType().equals(JavaElementType.METHOD)){
             elem=elem.getParent();
         }
-
 
         if(elem!=null && elem.getNode()!=null && elem.getNode().getElementType() != null
                 && elem.getNode().getElementType().equals(JavaElementType.METHOD)) {
@@ -429,13 +406,17 @@ public class EditorDocOps {
                 @Override
                 public void visitMethodCallExpression(PsiMethodCallExpression methodCall) {
                     String type = visitMethodCallExpressionUtil(methodCall, cleanedLine);
-                    if (type !=null && type != "")
+                    if (type !=null && !type.isEmpty())
                         imports.add(type);
                 }
 
                 @Override
                 public void visitVariable(PsiVariable variable) {
                     imports.addAll(visitVariableUtil(variable, cleanedLine)); // was passing nameVsTypeMap
+                }
+
+                @Override
+                public void visitAnonymousClass(PsiAnonymousClass aClass) {
                 }
             });
             // nameVsTypeMapInMethodScope.put(methodName, nameVsTypeMap);
@@ -449,11 +430,14 @@ public class EditorDocOps {
         if (params != null && params.length > 0) {
             for (PsiParameter p : params) {
                 String type = p.getType().getCanonicalText();
-                if(type.contains("<")){
-                    type = type.substring(0, type.indexOf("<"));
-                }
-                if (cleanedLine.contains(p.getName())) {
-                    imports.add(type);
+                if (type != null && !type.isEmpty()) {
+                    if (type.contains("<")) {
+                        type = type.substring(0, type.indexOf("<"));
+                    }
+                    if (cleanedLine.contains(p.getName())) {
+                        nameVsTypeMap.put(p.getName(), type);
+                        imports.add(type);
+                    }
                 }
             }
         }
@@ -464,7 +448,7 @@ public class EditorDocOps {
         Set<String> imports = new HashSet<String>();
         String type = variable.getType().getCanonicalText();
         //todo :ignore primitives types
-        if (type != null) {
+        if (type != null && !type.isEmpty()) {
             if (type.contains("<")) {
                 type = type.substring(0, type.indexOf("<"));
             }
@@ -477,6 +461,7 @@ public class EditorDocOps {
                     }
                     imports.add(variableInitializer);
                 }
+                nameVsTypeMap.put(variable.getName(), type);
                 imports.add(type);
             }
         }
@@ -488,14 +473,17 @@ public class EditorDocOps {
         PsiReferenceExpression methodExpr = methodCall.getMethodExpression();
         if (methodExpr != null && methodExpr.getQualifierExpression() != null) {
             String name = methodExpr.getQualifierExpression().getText();
+            String[] ids = methodExpr.getCanonicalText().split("\\.");
             PsiType psiType = methodExpr.getQualifierExpression().getType();
+            System.out.println(methodExpr.getQualifierExpression().getOriginalElement().getText());
             if (name != null && psiType != null) {
                 String type= psiType.getCanonicalText();
-                if (cleanedLine.contains(name.replaceFirst(REGEX, "").replaceAll("\\W+", " ").trim())) {
+                if (type !=null && !type.isEmpty() && cleanedLine.contains(name.replaceFirst(REGEX, "").replaceAll("\\W+", " ").trim())) {
                     if (type.contains("<")) {
                         type = type.substring(0, type.indexOf("<"));
-                        return type;
+                        nameVsTypeMap.put(ids[0], type);
                     }
+                    return type;
                 }
             }
         }
@@ -512,6 +500,7 @@ public class EditorDocOps {
         if(elem != null && elem.getNode() != null && elem.getNode().getElementType() != null &&
                 elem.getNode().getElementType().equals(JavaElementType.CLASS)) {
             ASTNode node = elem.getNode();
+
             PsiElement[] children = node.getPsi().getChildren();
             if (children != null && children.length > 0) {
                 imports.addAll(getImportsInClassFields(cleanedLine, children));
@@ -528,7 +517,7 @@ public class EditorDocOps {
                 //todo :ignore primitives types
                 if (cleanedLine.contains(" " + psiField.getName())) {
                     String type = psiField.getType().getCanonicalText();
-                    if (type != null) {
+                    if (type != null && !type.isEmpty() && nameVsTypeMap.get(psiField.getName()) == null) {
                         if (type.contains("<")) {
                             type = type.substring(0, type.indexOf("<"));
                         }
@@ -546,6 +535,5 @@ public class EditorDocOps {
         }
         return imports;
     }
-
 
 }
