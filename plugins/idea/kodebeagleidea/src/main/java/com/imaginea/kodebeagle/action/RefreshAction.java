@@ -364,8 +364,7 @@ public class RefreshAction extends AnAction {
     }
 
     private Set<String> getFinalImports(final Document document) {
-        Set<String> imports =
-                editorDocOps.getImports(document, windowObjects.getProject());
+        Set<String> imports = editorDocOps.getImports(document);
 
         if (!imports.isEmpty()) {
             if (propertiesComponent.isValueSet(EXCLUDE_IMPORT_LIST)) {
