@@ -227,3 +227,9 @@ these values can't be applied.<br>
 1. Labels which displays filename and project name in header panels of tiny code editors should be
    bold when mouse over and should be normal on mouse exit. <br>
 <img src = 'screenshots/beBold.png'/><br>
+
+#### 35. [idea] #271 Show information message "KodeBeagle supports only java files.." when trying to search from .class files.
+##### fixes <a href='https://github.com/Imaginea/KodeBeagle/issues/271'> #271 </a>
+1. Open KodeBeagle plugin, select some code from any .class file and hit refresh action. It will show information message
+"Currently KodeBeagle supports "java" files only".<br>
+<img src = 'screenshots/271.png'/><br>
