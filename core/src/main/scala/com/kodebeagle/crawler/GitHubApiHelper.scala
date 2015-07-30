@@ -18,7 +18,7 @@
 package com.kodebeagle.crawler
 
 import java.io.File
-import java.net.URL
+import java.net.{Socket, URL}
 
 import com.kodebeagle.configuration.KodeBeagleConfig
 import com.kodebeagle.crawler.GitHubRepoDownloader._
@@ -41,6 +41,7 @@ object GitHubApiHelper extends Logger {
   implicit val format = DefaultFormats
   private val client = new HttpClient()
   var token: String = KodeBeagleConfig.githubTokens(0)
+  var retryCount: Int = 0
 
   /**
    * Access Github's
@@ -129,20 +130,34 @@ object GitHubApiHelper extends Logger {
     method
   }
 
-  def downloadRepository(r: Repository, targetDir: String): Option[File] = {
-    try {
-      val repoFile = new File(
-        targetDir +
-          s"/repo~${r.login}~${r.name}~${r.id}~${r.fork}~${r.language}~${r.defaultBranch}" +
-          s"~${r.stargazersCount}.zip")
-      log.info(s"Downloading $repoFile")
-      FileUtils.copyURLToFile(new URL(
-        s"https://github.com/${r.login}/${r.name}/archive/${r.defaultBranch}.zip"), repoFile)
-      Some(repoFile)
-    } catch {
-      case x: Throwable =>
-        log.error(s"Failed to download $r", x)
-        None
+  def downloadRepository(r: Repository, targetDir: String, retry: Int): Option[File] = {
+    if (retry < 3) {
+      try {
+        val repoFile = new File(
+          targetDir +
+            s"/repo~${r.login}~${r.name}~${r.id}~${r.fork}~${r.language}~${r.defaultBranch}" +
+            s"~${r.stargazersCount}.zip")
+        log.info(s"Downloading $repoFile")
+        FileUtils.copyURLToFile(new URL(
+          s"https://github.com/${r.login}/${r.name}/archive/${r.defaultBranch}.zip"),
+          repoFile, 5000 * 12, 5000 * 12)
+        Some(repoFile)
+      } catch {
+        case x: java.net.SocketTimeoutException =>
+          log.info("Connection lost, retrying")
+          retryCount += 1
+          downloadRepository(r, targetDir, retryCount)
+          None
+        case x: java.io.FileNotFoundException =>
+          log.error(s"File not found exception $r")
+          None
+        case x: java.io.IOException =>
+          log.error(s"Failed to download $r")
+          None
+      }
+    } else {
+      log.info(s"Retry limit exceeded $r")
+      None
     }
   }
 
@@ -185,7 +200,7 @@ object GitHubRepoCrawlerApp {
     log.info("page count :" + pageCount)
     (1 to pageCount) foreach { page =>
       getAllGitHubReposForOrg(organizationName, page).filter(x => !x.fork && x.language == "Java")
-        .map(x => downloadRepository(x, KodeBeagleConfig.githubDir))
+        .map(x => downloadRepository(x, KodeBeagleConfig.githubDir, 0))
     }
 
   }
@@ -194,7 +209,7 @@ object GitHubRepoCrawlerApp {
     val (allGithubRepos, next) = getAllGitHubRepos(since)
     allGithubRepos.filter(x => x("fork") == "false").distinct
       .flatMap(fetchDetails).distinct.filter(x => x.language == "Java" && !x.fork)
-      .map(x => downloadRepository(x, KodeBeagleConfig.githubDir))
+      .map(x => downloadRepository(x, KodeBeagleConfig.githubDir, 0))
     next
   }
 }
