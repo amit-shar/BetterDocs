@@ -21,6 +21,7 @@ import java.io.File
 import java.net.URL
 
 import com.kodebeagle.configuration.KodeBeagleConfig
+import com.kodebeagle.crawler.GitHubRepoDownloadTracker.RepoDownloadTracker
 import com.kodebeagle.crawler.GitHubRepoDownloader._
 import com.kodebeagle.indexer.Repository
 import com.kodebeagle.logging.Logger
@@ -136,8 +137,10 @@ object GitHubApiHelper extends Logger {
           s"/repo~${r.login}~${r.name}~${r.id}~${r.fork}~${r.language}~${r.defaultBranch}" +
           s"~${r.stargazersCount}.zip")
       log.info(s"Downloading $repoFile")
-      FileUtils.copyURLToFile(new URL(
-        s"https://github.com/${r.login}/${r.name}/archive/${r.defaultBranch}.zip"), repoFile)
+      val url = new URL(
+        s"https://github.com/${r.login}/${r.name}/archive/${r.defaultBranch}.zip")
+      val downloadTracker = GitHubRepoDownloadTracker.createDownloadTracker()
+      downloadTracker ! RepoDownloadTracker(repoFile, url)
       Some(repoFile)
     } catch {
       case x: Throwable =>
@@ -192,9 +195,10 @@ object GitHubRepoCrawlerApp {
 
   def downloadFromRepoIdRange(since: Int): Int = {
     val (allGithubRepos, next) = getAllGitHubRepos(since)
-    allGithubRepos.filter(x => x("fork") == "false").distinct
+   val javaFilesRepo= allGithubRepos.filter(x => x("fork") == "false").distinct
       .flatMap(fetchDetails).distinct.filter(x => x.language == "Java" && !x.fork)
-      .map(x => downloadRepository(x, KodeBeagleConfig.githubDir))
+    log.info("number of repos " + javaFilesRepo.size + "since " +since)
+    javaFilesRepo.map(x => downloadRepository(x, KodeBeagleConfig.githubDir))
     next
   }
 }

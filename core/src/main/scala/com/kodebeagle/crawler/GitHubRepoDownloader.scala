@@ -19,8 +19,6 @@ package com.kodebeagle.crawler
 
 import akka.actor.Actor
 import akka.actor.Props
-import scala.concurrent.duration.Duration
-import java.util.concurrent.TimeUnit
 import akka.actor.ActorSystem
 import com.kodebeagle.logging.Logger
 import com.kodebeagle.configuration.KodeBeagleConfig
