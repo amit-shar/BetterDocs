@@ -40,13 +40,13 @@ import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
-import com.intellij.psi.PsiImportList;
-import com.intellij.psi.PsiImportStatementBase;
-import com.intellij.psi.PsiJavaCodeReferenceElement;
 import com.intellij.psi.PsiJavaFile;
+import com.intellij.psi.PsiMethod;
+import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.ui.Gray;
 import com.intellij.ui.JBColor;
 import java.awt.Color;
@@ -56,7 +56,6 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.StringTokenizer;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.regex.Matcher;
@@ -65,41 +64,22 @@ import java.util.regex.PatternSyntaxException;
 import org.jetbrains.annotations.NotNull;
 
 public class EditorDocOps {
+    private static final String IMPLICIT_IMPORT = "java.lang";
+    private static final String JAVA_IO_TMP_DIR = "java.io.tmpdir";
+    private static final String FILE_EXTENSION = "java";
     private WindowObjects windowObjects = WindowObjects.getInstance();
     private WindowEditorOps windowEditorOps = new WindowEditorOps();
-    private static final String JAVA_IO_TMP_DIR = "java.io.tmpdir";
     private static final Color HIGHLIGHTING_COLOR =
             new JBColor(new Color(255, 250, 205), Gray._100);
     public static final char DOT = '.';
-    private static final String FILE_EXTENSION = "java";
+    private int start;
+    private int end;
 
-    public final Set<String> importsInLines(final Iterable<String> lines,
-                                            final Iterable<String> imports) {
-        Set<String> importsInLines = new HashSet<String>();
-
-        for (String line : lines) {
-            StringTokenizer stringTokenizer = new StringTokenizer(line);
-            while (stringTokenizer.hasMoreTokens()) {
-                String token = stringTokenizer.nextToken();
-                for (String nextImport : imports) {
-                    String shortImportName = nextImport.substring(nextImport.lastIndexOf(DOT) + 1);
-                    if (token.equalsIgnoreCase(shortImportName)) {
-                        importsInLines.add(nextImport);
-                    }
-                }
-            }
-        }
-        return importsInLines;
-    }
-
-    public final Set<String> getLines(final Editor projectEditor, final int distance) {
-        Set<String> lines = new HashSet<String>();
+    public final void setLineOffSets(final Editor projectEditor, final int distance) {
         Document document = projectEditor.getDocument();
-        String regex = "(\\s*(import|\\/?\\*|//)\\s+.*)|\\\".*";
         SelectionModel selectionModel = projectEditor.getSelectionModel();
         int head = 0;
         int tail = document.getLineCount() - 1;
-
         if (selectionModel.hasSelection()) {
             head = document.getLineNumber(selectionModel.getSelectionStart());
             tail = document.getLineNumber(selectionModel.getSelectionEnd());
@@ -120,48 +100,47 @@ public class EditorDocOps {
                 tail = currentLine + distance;
             }
         }
-
-        for (int j = head; j <= tail; j++) {
-            String line =
-                    document.getCharsSequence().subSequence(document.getLineStartOffset(j),
-                            document.getLineEndOffset(j)).toString();
-            String cleanedLine = line.replaceFirst(regex, "").replaceAll("\\W+", " ").trim();
-            if (!cleanedLine.isEmpty()) {
-                lines.add(cleanedLine);
-            }
-        }
-        return lines;
+        start = document.getLineStartOffset(head);
+        end = document.getLineEndOffset(tail);
     }
 
-    public final Set<String> getImports(@NotNull final Document document) {
-        PsiDocumentManager psiInstance = PsiDocumentManager.getInstance(windowObjects.getProject());
-        Set<String> imports = new HashSet<String>();
-        if (psiInstance != null && (psiInstance.getPsiFile(document)) != null) {
-            PsiFile psiFile = psiInstance.getPsiFile(document);
-            if (psiFile != null
-                    && psiFile.getFileType().getDefaultExtension().equals(FILE_EXTENSION)) {
-                PsiJavaFile psiJavaFile = (PsiJavaFile) psiFile;
-                PsiImportList psiImportList = psiJavaFile.getImportList();
-                if (psiImportList != null) {
-                    PsiImportStatementBase[] importStatements =
-                            psiImportList.getAllImportStatements();
-                    for (PsiImportStatementBase psiImportStatementBase : importStatements) {
-                        if (psiImportStatementBase.getImportReference() != null) {
-                            PsiJavaCodeReferenceElement importReference =
-                                    psiImportStatementBase.getImportReference();
-                            if (importReference != null) {
-                                imports.add(importReference.getCanonicalText());
-                            }
-                        }
-                    }
+    public final Set<String> getImportInLines(final Editor projectEditor) {
+        PsiDocumentManager psiInstance =
+                PsiDocumentManager.getInstance(windowObjects.getProject());
+        PsiJavaFile psiJavaFile =
+                (PsiJavaFile) psiInstance.getPsiFile(projectEditor.getDocument());
+        PsiJavaElementVisitor psiJavaElementVisitor =
+                new PsiJavaElementVisitor(start, end);
+        if (psiJavaFile != null && psiJavaFile.findElementAt(start) != null) {
+            PsiElement psiElement = psiJavaFile.findElementAt(start);
+            final PsiElement psiMethod =  PsiTreeUtil.getParentOfType(psiElement, PsiMethod.class);
+            if (psiMethod != null) {
+                psiMethod.accept(psiJavaElementVisitor);
+            } else {
+                final PsiClass psiClass = PsiTreeUtil.getParentOfType(psiElement, PsiClass.class);
+                if (psiClass != null) {
+                    psiClass.accept(psiJavaElementVisitor);
                 }
             }
         }
-        return imports;
+        Set<String> importsInLines = psiJavaElementVisitor.getImportsSet();
+        importsInLines = removeImplicitImports(importsInLines);
+        return importsInLines;
+    }
+
+    private Set<String> removeImplicitImports(final Set<String> importsInLines) {
+        Set<String> excludeImplicitImports = new HashSet<String>();
+        for (String importValue : importsInLines) {
+            if (importValue != null && importValue.startsWith(IMPLICIT_IMPORT)) {
+                excludeImplicitImports.add(importValue);
+            }
+        }
+        importsInLines.removeAll(excludeImplicitImports);
+        return importsInLines;
     }
 
     public final Set<String> excludeInternalImports(@NotNull final Set<String> imports) {
-        final Set<String> internalImports = new HashSet<String>();
+        final Set<String> importsAfterExclusion = new HashSet<String>();
         PackageIndex packageIndex = PackageIndex.getInstance(windowObjects.getProject());
         for (String importName : imports) {
             int indexOfDot = importName.lastIndexOf(DOT);
@@ -173,12 +152,12 @@ public class EditorDocOps {
                 if (packageDirectories.size() > 0) {
                     VirtualFile packageDirectory = packageDirectories.get(0);
                     if (!packageDirectory.isInLocalFileSystem()) {
-                        internalImports.add(importName);
+                        importsAfterExclusion.add(importName);
                     }
                 }
             }
         }
-        return internalImports;
+        return importsAfterExclusion;
     }
 
     public final Set<String> excludeConfiguredImports(final Set<String> imports,
