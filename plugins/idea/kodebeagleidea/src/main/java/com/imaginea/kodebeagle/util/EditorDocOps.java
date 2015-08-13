@@ -151,7 +151,6 @@ public class EditorDocOps {
         return finalImports;
     }
 
-
     private Set<String> getFullyQualifiedImports(final PsiJavaFile javaFile,
                                                 final Set<String> importsInLines) {
         Set<String> fullyQualifiedImports = new HashSet<>();
