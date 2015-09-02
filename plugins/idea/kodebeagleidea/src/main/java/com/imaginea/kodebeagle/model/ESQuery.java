@@ -172,6 +172,14 @@ public class ESQuery {
 
     public static class Should {
         private Terms terms;
+        private Term term;
+        public final Term getTerm() {
+            return term;
+        }
+
+        public final void setTerm(final Term pterm) {
+            this.term = pterm;
+        }
 
         public final Terms getTerms() {
             return terms;

@@ -26,6 +26,7 @@ import com.google.gson.stream.JsonReader;
 import com.imaginea.kodebeagle.model.ESFileContent;
 import com.imaginea.kodebeagle.model.ESQuery;
 import com.imaginea.kodebeagle.model.RepoStarsJSON;
+
 import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -49,6 +50,7 @@ public class JSONUtils {
     private static final String TYPESOURCEFILENAME_FILENAME = "typesourcefile.fileName";
     private static final String FILE_NAME = "fileName";
     private static final String LINE_NUMBER = "lineNumber";
+    private static final String TYPESUGGESTION_IMPORT_NAME = "typesuggestion.importName";
 
     public final String getJsonForFileContent(final List<String> fileNameList) {
         ESFileContent esFileContent = new ESFileContent();
@@ -126,6 +128,25 @@ public class JSONUtils {
         return esQuery;
     }
 
+    private ESQuery getFilteredSuggestionQuery(final int size) {
+        ESQuery esQuery = new ESQuery();
+        ESQuery.Query query = new ESQuery.Query();
+        esQuery.setQuery(query);
+        esQuery.setFrom(0);
+        esQuery.setSize(size);
+        ESQuery.Filtered filtered = new ESQuery.Filtered();
+        filtered.setCache(true);
+        query.setFiltered(filtered);
+        ESQuery.Filter filter = new ESQuery.Filter();
+        esQuery.getQuery().getFiltered().setFilter(filter);
+        ESQuery.Bool bool = new ESQuery.Bool();
+        List<ESQuery.Should> shouldList = new ArrayList<>();
+        bool.setShould(shouldList);
+        filter.setBool(bool);
+        return esQuery;
+    }
+
+
     private ESQuery.And getAndTerm(final Map.Entry<String, Set<String>> entry,
                                    final boolean includeMethods) {
         ESQuery.And and = new ESQuery.And();
@@ -149,6 +170,13 @@ public class JSONUtils {
             and.setTerm(term);
             return and;
         }
+    }
+
+    private ESQuery.Should getShouldTerm(final Map.Entry<String, Set<String>> entry) {
+        ESQuery.Should should = new ESQuery.Should();
+        ESQuery.Term term = getImportTerm(entry.getKey());
+        should.setTerm(term);
+        return should;
     }
 
     private List<ESQuery.Must> getImportMustList(final String importName) {
@@ -192,6 +220,22 @@ public class JSONUtils {
         return gson.toJson(esQuery).replaceAll(IMPORT_NAME,
                 TOKENS_IMPORT_NAME).replaceAll(METHOD_NAME,
                 TOKENS_METHOD_NAME).replace(CACHE, FILTER_CACHE);
+    }
+
+    public final String getESQuerySuggestionJson(
+            final Map<String, Set<String>> importsInLines,
+            final int size) {
+        ESQuery esQuery = getFilteredSuggestionQuery(size);
+        List<ESQuery.Should> shouldList =
+                esQuery.getQuery().getFiltered().getFilter().getBool().getShould();
+        Set<Map.Entry<String, Set<String>>> entrySet = importsInLines.entrySet();
+        for (Map.Entry<String, Set<String>> entry : entrySet) {
+            ESQuery.Should should = getShouldTerm(entry);
+            shouldList.add(should);
+        }
+        Gson gson = new Gson();
+        return gson.toJson(esQuery).replaceAll(IMPORT_NAME,
+                TYPESUGGESTION_IMPORT_NAME).replace(CACHE, FILTER_CACHE);
     }
 
     public final List<Integer> getLineNumbers(final Collection<String> imports,

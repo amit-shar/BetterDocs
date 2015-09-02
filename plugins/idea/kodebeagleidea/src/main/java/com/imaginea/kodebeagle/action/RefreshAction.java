@@ -37,6 +37,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Pair;
 import com.intellij.ui.classFilter.ClassFilter;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -86,11 +87,13 @@ public class RefreshAction extends AnAction {
     public static final String TOP_COUNT = "Top count";
     private static final String PROJECT_ERROR = "Unable to get Project. Please Try again";
     public static final String OPT_OUT_CHECKBOX_VALUE = "Opt out checkbox value";
+    private static final String SUGGESTION = "suggestion";
     private WindowObjects windowObjects = WindowObjects.getInstance();
     private WindowEditorOps windowEditorOps = new WindowEditorOps();
     private EditorDocOps editorDocOps = new EditorDocOps();
     private Settings currentSettings;
     private UIUtils uiUtils = new UIUtils();
+    private Map<String, Set<String>> suggestedImportsMap = new HashMap<>();
 
     public RefreshAction() {
         super(KODEBEAGLE, KODEBEAGLE, AllIcons.Actions.Refresh);
@@ -99,14 +102,14 @@ public class RefreshAction extends AnAction {
     @Override
     public final void actionPerformed(@NotNull final AnActionEvent anActionEvent) {
         try {
-            init();
+            init("");
         } catch (IOException ioe) {
             KBNotification.getInstance().error(ioe);
             ioe.printStackTrace();
         }
     }
 
-    public final void runAction() throws IOException {
+    public final void runAction(final String callFrom) throws IOException {
         Project project = windowObjects.getProject();
         final Editor projectEditor = FileEditorManager.getInstance(project).getSelectedTextEditor();
 
@@ -119,12 +122,15 @@ public class RefreshAction extends AnAction {
             root.removeAllChildren();
             jTree.setVisible(true);
             windowObjects.getSpotlightPaneTinyEditorsJPanel().removeAll();
-
+            Map<String, Set<String>> allImports;
             if (editorDocOps.isJavaFile(projectEditor.getDocument())) {
-                Pair<Integer, Integer> pair =
-                        editorDocOps.getLineOffSets(projectEditor, windowObjects.getDistance());
-                Map<String, Set<String>> allImports =
-                        getAllImportsAfterExcludes(projectEditor, pair);
+                if (SUGGESTION.equals(callFrom)) {
+                    allImports = suggestedImportsMap;
+                } else {
+                    Pair<Integer, Integer> pair =
+                            editorDocOps.getLineOffSets(projectEditor, windowObjects.getDistance());
+                    allImports = getAllImportsAfterExcludes(projectEditor, pair);
+                }
                 if (!allImports.isEmpty()) {
                     ProgressManager.getInstance().run(new QueryKBServerTask(
                             windowObjects.getProject(), allImports, jTree, model, root));
@@ -170,7 +176,7 @@ public class RefreshAction extends AnAction {
         return importVsMethods;
     }
 
-    public final void init() throws IOException {
+    public final void init(final String callFrom) throws IOException {
         DataContext dataContext = DataManager.getInstance().getDataContext();
         Project project = (Project) dataContext.getData(DataConstants.PROJECT);
         currentSettings = new Settings();
@@ -182,10 +188,27 @@ public class RefreshAction extends AnAction {
             windowObjects.setMaxTinyEditors(currentSettings.getLimits().getTopCount());
             windowObjects.retrieveIncludeMethods();
             windowEditorOps.writeToDocument("", windowObjects.getWindowEditor().getDocument());
-            runAction();
+            if (SUGGESTION.equals(callFrom)) {
+                runAction(callFrom);
+            } else {
+                runAction("");
+            }
         } else {
             uiUtils.showHelpInfo(PROJECT_ERROR);
             uiUtils.goToAllPane();
        }
+    }
+
+    public final void setSuggestedImportsMap(final String description) {
+        Set<String> emptyMethodSet = new HashSet<>();
+        if (description != null && !description.isEmpty()) {
+            String [] splitImports = description.split(", ");
+            if (!suggestedImportsMap.isEmpty()) {
+                suggestedImportsMap.clear();
+            }
+            for (int i = 0; i < splitImports.length; i++) {
+                suggestedImportsMap.put(splitImports[i], emptyMethodSet);
+            }
+        }
     }
 }

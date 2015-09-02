@@ -35,7 +35,7 @@ public class SearchKodeBeagleAction extends AnAction {
                 @Override
                 public void run() {
                     try {
-                        new RefreshAction().init();
+                        new RefreshAction().init("");
                     } catch (IOException ioe) {
                         KBNotification.getInstance().error(ioe);
                         ioe.printStackTrace();

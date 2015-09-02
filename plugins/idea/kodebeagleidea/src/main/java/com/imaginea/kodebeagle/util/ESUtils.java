@@ -33,8 +33,11 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
@@ -57,6 +60,8 @@ public class ESUtils {
     private static final String FILE_NAME = "fileName";
     private static final String UID = "&uid=";
     private static final String OPTED_OUT = "opted-out";
+    private static final String IMPORTS = "imports";
+    private static final String IMPORT_EXACTNAME = "importExactName";
 
     private static WindowObjects windowObjects = WindowObjects.getInstance();
     private JSONUtils jsonUtils = new JSONUtils();
@@ -124,6 +129,27 @@ public class ESUtils {
         return fileTokenMap;
     }
 
+    public final Map<Integer, Set<String>> getSuggestionTokens(final String esResultJson) {
+        Map<Integer, Set<String>> suggestionsMap = new HashMap<Integer, Set<String>>();
+        int i = 0;
+        final JsonObject hitsObject = getJsonElements(esResultJson);
+        JsonArray hitsArray = getJsonHitsArray(hitsObject);
+        resultCount = hitsArray.size();
+        totalHitsCount = getTotalHits(hitsObject);
+        for (JsonElement hits : hitsArray) {
+            JsonObject hitObject = hits.getAsJsonObject();
+            JsonObject sourceObject = hitObject.getAsJsonObject(SOURCE);
+            JsonArray imports = sourceObject.getAsJsonArray(IMPORTS);
+            Set<String> importsSuggested = new HashSet<String>();
+            for (JsonElement importName : imports) {
+                importsSuggested.add(importName.getAsJsonObject().
+                        get(IMPORT_EXACTNAME).getAsString());
+            }
+            suggestionsMap.put(i, importsSuggested);
+            i++;
+        }
+        return suggestionsMap;
+    }
     protected final JsonObject getJsonElements(final String esResultJson) {
         JsonReader reader = new JsonReader(new StringReader(esResultJson));
         reader.setLenient(true);

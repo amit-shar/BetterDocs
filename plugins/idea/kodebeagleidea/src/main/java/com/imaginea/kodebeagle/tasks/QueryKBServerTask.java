@@ -17,6 +17,7 @@
 
 package com.imaginea.kodebeagle.tasks;
 
+import com.imaginea.kodebeagle.action.RefreshAction;
 import com.imaginea.kodebeagle.model.CodeInfo;
 import com.imaginea.kodebeagle.object.WindowObjects;
 import com.imaginea.kodebeagle.ui.KBNotification;
@@ -32,11 +33,18 @@ import com.intellij.openapi.progress.PerformInBackgroundOption;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.Project;
+
+import java.io.IOException;
 import java.util.Iterator;
+
+import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 
+import javax.swing.JEditorPane;
 import javax.swing.JTree;
 import javax.swing.ToolTipManager;
+import javax.swing.event.HyperlinkEvent;
+import javax.swing.event.HyperlinkListener;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import java.util.ArrayList;
@@ -51,16 +59,17 @@ public class QueryKBServerTask extends Task.Backgroundable {
     private static final String FORMAT = "%s %s %s";
     private static final String QUERIED = "Queried";
     private static final String FOR = "for <br/>";
+    private static final String SUGGESTIONS = "<b> You can try one of the suggestions:</b> <br/>";
+    private static final String HREF = "<a href=\"%s\">";
+    private static final String HREF_CLOSE = "</a><br/>";
+    private static final String DIV = "<br></body></html>";
     private static final String QUERY_HELP_MESSAGE =
-            "<html><body> <p style= \\\"padding-left:0.15cm;\\\"> "
-                    + "<i><b>We tried querying our servers with : </b></i> <br/> %s"
-                    + "<i><b><br/>but found no results in response.</i></b></p>";
+            "<html><body> <p> <i><b>We tried querying our servers with : </b></i> <br /> %s </p>"
+                    + "<i><b>but found no results in response.</i></b><br/>";
     private static final String PRO_TIP =
-            "<p style= \\\"padding-left:0.15cm;\\\"> <br/>"
-                    + "<b>Tip:</b> Try narrowing your selection to fewer lines. "
+            "<p><b>Tip:</b> Try narrowing your selection to fewer lines. "
                     + "<br/>Alternatively, \"Configure imports\" in settings <img src='"
-                    + AllIcons.General.Settings + "'/>. "
-                    + "</p></body></html>";
+                    + AllIcons.General.Settings + "'/>.</p>";
     private static final String FETCHING_PROJECTS = "Fetching projects...";
     private static final String FETCHING_FILE_CONTENTS = "Fetching file contents...";
     public static final String KODEBEAGLE = "KodeBeagle";
@@ -71,6 +80,7 @@ public class QueryKBServerTask extends Task.Backgroundable {
             "<br/> Showing %d of %d results (%.2f seconds)";
     private static final String KODEBEAGLE_SEARCH = "/importsmethods/_search?source=";
     public static final int MIN_IMPORT_SIZE = 3;
+    private static final String KODEBEAGLE_SUGGESTION_SEARCH = "/suggestion/_search?source=";
     private final Map<String, Set<String>> finalImports;
     private final JTree jTree;
     private final DefaultTreeModel model;
@@ -85,6 +95,7 @@ public class QueryKBServerTask extends Task.Backgroundable {
     private JSONUtils jsonUtils = new JSONUtils();
     private List<CodeInfo> spotlightPaneTinyEditorsInfoList = new ArrayList<CodeInfo>();
     private UIUtils uiUtils = new UIUtils();
+    private static Map<Integer, Set<String>> suggestedImportsMap;
 
     public QueryKBServerTask(final Project project, final Map<String, Set<String>> pFinalImports,
                              final JTree pJTree, final DefaultTreeModel pModel,
@@ -140,7 +151,7 @@ public class QueryKBServerTask extends Task.Backgroundable {
                 Map.Entry<String, Set<String>> next = iterator.next();
                 notificationContent.append(next.getKey());
                 Set<String> methods = next.getValue();
-                if (!methods.isEmpty()) {
+                if (methods != null && !methods.isEmpty()) {
                     notificationContent.append(" " + methods.toString());
                 }
                 if (iterator.hasNext()) {
@@ -165,10 +176,17 @@ public class QueryKBServerTask extends Task.Backgroundable {
             } else {
                 String helpMsg = String.format(QUERY_HELP_MESSAGE,
                         getNotificationContent());
+                String helpMsgWithProTip = helpMsg;
                 if (finalImports.size() > MIN_IMPORT_SIZE) {
-                    helpMsg = helpMsg + PRO_TIP;
+                    helpMsgWithProTip = helpMsgWithProTip + PRO_TIP;
                 }
-                uiUtils.showHelpInfo(helpMsg);
+                if (suggestedImportsMap != null && !suggestedImportsMap.isEmpty()
+                        && finalImports.size() < 10) {
+                    showSuggestionInfo(helpMsg);
+                } else {
+                    uiUtils.showHelpInfo(helpMsgWithProTip);
+                }
+
                 jTree.updateUI();
                 if (notification != null) {
                     notification.expire();
@@ -185,7 +203,9 @@ public class QueryKBServerTask extends Task.Backgroundable {
         if (!esResultJson.equals(EMPTY_ES_URL)) {
             projectNodes = getProjectNodes(esResultJson);
             indicator.setFraction(INDICATOR_FRACTION);
-            if (!projectNodes.isEmpty()) {
+            if (projectNodes.isEmpty()) {
+                suggestedImportsMap = getImportsSuggestion();
+            } else {
                 indicator.setText(FETCHING_FILE_CONTENTS);
                 spotlightPaneTinyEditorsInfoList =
                         getSpotlightPaneTinyEditorsInfoList();
@@ -262,5 +282,64 @@ public class QueryKBServerTask extends Task.Backgroundable {
         String esQueryResultJson =
                 esUtils.getESResultJson(esQueryJson, windowObjects.getEsURL() + KODEBEAGLE_SEARCH);
         return esQueryResultJson;
+    }
+
+    private  Map<Integer, Set<String>> getImportsSuggestion() {
+        String esQueryJson = jsonUtils.getESQuerySuggestionJson(finalImports, 10);
+        String esQueryResultJson = esUtils.getESResultJson(esQueryJson,
+                windowObjects.getEsURL() + KODEBEAGLE_SUGGESTION_SEARCH);
+        return esUtils.getSuggestionTokens(esQueryResultJson);
+    }
+
+    public final void showSuggestionInfo(final String helpMsg) {
+        JEditorPane jEditorPane = new JEditorPane();
+        jEditorPane.setEditorKit(UIUtil.getHTMLEditorKit());
+        jEditorPane.setEditable(false);
+        String [] suggestions = getSuggestionArray();
+        StringBuilder suggestion = new StringBuilder();
+        suggestion.append(helpMsg);
+        suggestion.append(SUGGESTIONS);
+
+        for (int i = 0; i < suggestions.length; i++) {
+            suggestion.append(i + 1 + ". ");
+            suggestion.append(String.format(HREF, suggestions[i]));
+            suggestion.append(suggestions[i]);
+            suggestion.append(HREF_CLOSE);
+        }
+        suggestion.append(DIV);
+
+        jEditorPane.setText(suggestion.toString());
+        jEditorPane.setBackground(UIUtil.AQUA_SEPARATOR_BACKGROUND_COLOR);
+        jEditorPane.addHyperlinkListener(new HyperlinkListener() {
+            public void hyperlinkUpdate(final HyperlinkEvent he) {
+                if (he.getEventType() == HyperlinkEvent.EventType.ACTIVATED) {
+                    try {
+                        RefreshAction refreshAction = new RefreshAction();
+                        refreshAction.setSuggestedImportsMap(he.getDescription());
+                        refreshAction.init("suggestion");
+                    } catch (IOException ioe) {
+                        ioe.printStackTrace();
+                    }
+                }
+            }
+        });
+
+        uiUtils.goToAllPane();
+        windowObjects.getjTreeScrollPane().setViewportView(jEditorPane);
+    }
+
+    public final String [] getSuggestionArray() {
+        String [] suggestion = new String[3];
+
+        if (!suggestedImportsMap.isEmpty()) {
+            for (int i = 0; i < 3 && i < suggestedImportsMap.size(); i++) {
+                Set<String> imports = suggestedImportsMap.get(i);
+                if (imports != null && !imports.isEmpty()) {
+                    suggestion[i] = imports.toString().substring(1,
+                            imports.toString().lastIndexOf("]"));
+                }
+            }
+        }
+        return  suggestion;
     }
 }
