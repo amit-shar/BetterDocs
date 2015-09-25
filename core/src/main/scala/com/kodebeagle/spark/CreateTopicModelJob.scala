@@ -37,14 +37,13 @@ import org.apache.spark.graphx.Graph
 import org.apache.spark.graphx.TripletFields
 import org.apache.spark.graphx.EdgeTriplet
 import org.apache.spark.graphx.VertexRDD
-import scala.util.Random
+import scala.util.{Failure, Success, Random, Try}
 import org.apache.spark.graphx.EdgeDirection
 import org.apache.spark.broadcast.Broadcast
 import com.kodebeagle.ml.LDA
 import org.apache.spark.graphx.PartitionStrategy
 import org.apache.spark.graphx.EdgeRDD
 import org.apache.spark.graphx.impl.EdgeRDDImpl
-import scala.util.Try
 import com.kodebeagle.logging.Logger
 import com.kodebeagle.configuration.TopicModelConfig
 import com.kodebeagle.ml.LDAModel
@@ -176,10 +175,8 @@ object CreateTopicModelJob extends Logger {
     tokenToWordMap: Map[Long, String],
     repoIdVsDocIdMap: Map[String, String],
     fileIdVsName: mutable.Map[Long, String]): Unit = {
-
     val topics = result.describeTopics(nWordsDesc)
     logTopics(topics, repoIdVsName, tokenToWordMap)
-
     var i = nbgTopics
     val repoTopics = topics.slice(nbgTopics, topics.length)
     // For each repo, map of topic terms vs their frequencies 
@@ -192,7 +189,6 @@ object CreateTopicModelJob extends Logger {
       i += 1
       (repoName, topicMap)
     }
-
     val repoSummary = result.summarizeDocGroups()
     logRepoSummary(repoSummary, repoIdVsName, fileIdVsName)
 
@@ -207,13 +203,19 @@ object CreateTopicModelJob extends Logger {
     
     val updatedRepoRDD = sc.makeRDD(repoTopicFields).join(repoFilescore)
     .map({ case(repoId, (repoTopicMap, repoFileMap)) =>
-        val esTopicMap = repoTopicMap.map(f => Map(termFieldName -> f._1, freqFieldName  -> f._2))
+        val totalFrequency = repoTopicMap.values.sum
+      val esTopicMap = repoTopicMap.map { f =>
+        Try(f._2 / totalFrequency.toDouble)  match {
+          case Success(d) => Map(termFieldName -> f._1,
+            freqFieldName -> d)
+          case Failure(ex) => Map()
+        }
+      }.filter(_.nonEmpty)
         val esFilesMap = repoFileMap.map(f => Map(fileFieldName-> f._1, klScoreFieldName-> f._2))
         val termMap = Map(topicFieldName -> esTopicMap)
         val topicMap = Map(filesFieldName -> esFilesMap)
         Map("_id" -> repoId) ++  termMap ++ topicMap
       })
-
     updatedRepoRDD.saveToEs(KodeBeagleConfig.esRepoTopicIndex,
       Map("es.write.operation" -> "upsert", 
           "es.mapping.id" -> "_id"))
