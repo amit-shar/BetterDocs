@@ -106,6 +106,7 @@ object KodeBeagleBuild extends Build {
 
 object Dependencies {
 
+  val scalastyle = "org.scalastyle" %% "scalastyle" % "0.7.0" // Needed for scala parsing.
   val spark = "org.apache.spark" %% "spark-core" % "1.4.1"
 //"org.apache.spark" %% "spark-core" % "1.3.1" // % "provided" Provided makes it not run through sbt run.
   val parserCombinator = "org.scala-lang.modules" %% "scala-parser-combinators" % "1.0.3"
@@ -138,7 +139,7 @@ object EclipseDeps {
 }
 
   
-  val kodebeagle = Seq(spark, parserCombinator, scalaTest, slf4j, javaparser, json4s, config,
+  val kodebeagle = Seq(scalastyle, spark, parserCombinator, scalaTest, slf4j, javaparser, json4s, config,
     json4sJackson, jgit, commonsIO, esSpark, graphx) ++ EclipseDeps.allDeps
 
   val ideaPluginTest = Seq(scalaTest, commonsIO)
