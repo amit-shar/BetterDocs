@@ -18,6 +18,7 @@
 package com.kodebeagle.spark
 
 import org.apache.spark.SparkConf
+import scala.StringBuilder
 import scala.collection.JavaConversions._
 import com.kodebeagle.configuration.KodeBeagleConfig
 import org.apache.spark.SparkContext
@@ -52,7 +53,11 @@ import com.kodebeagle.ml.DistributedLDAModel
 
 object CreateTopicModelJob extends Logger {
 
-  case class Node(name: String, parentId: Long, id: Long = -22) extends Serializable
+  case class Node(name: String, parentId: Array[Long], id: Long = -22) extends Serializable {
+    override def toString = {
+           (name)
+    }
+  }
 
   val jobName = TopicModelConfig.jobName
   val nbgTopics = TopicModelConfig.nbgTopics
@@ -84,7 +89,7 @@ object CreateTopicModelJob extends Logger {
     val repoIds = repos.map({
       case ((recordId, valueMap)) =>
         (recordId, valueMap.get("id").get.toString())
-    }).collect()
+    }).take(10)
 
     while ((repoCounter == 0 || fetched == batchSize) && repoCounter >= 0) {
       sc.stop()
@@ -126,47 +131,65 @@ object CreateTopicModelJob extends Logger {
         (repoId, recordId)
     }).toMap
     val repoIdVsFiles = repoSources.groupBy(_._1)
-    val repos = repoIdVsFiles.map(f => new Node(f._1.toString(), 0))
+    val repos = repoIdVsFiles.map(f => new Node(f._1.toString(), Array(0)))
     val (repoNameVsId, repoIdVsName, repoVertices) = extractVocab(repos, offset)
+
     val fileIdOffset = repoNameVsId.size + offset
     val files = repoSources.map({
       case (repoId, (fileName, fileContent)) =>
-        new Node(repoId + ":" + fileName, repoNameVsId.get(repoId.toString()).get)
+        new Node(repoId + ":" + fileName, Array(repoNameVsId.get(repoId.toString()).get))
     }).distinct()
-    val (fileNameVsId, fileIdVsName, fileVertices) = extractVocab(files, fileIdOffset);
+    val (fileNameVsId, fileIdVsName, fileVertices) = extractVocab(files, fileIdOffset)
 
-    val words = repoSources.map({
+    val paragraphIdOffset = fileNameVsId.size + repoNameVsId.size + offset
+    val paragraph = repoSources.map({
       case (repoId, (fileName, fileContent)) =>
         (fileName, (repoId, fileContent))
     }).repartition(sc.defaultParallelism)
       .flatMap({
-        case (fileName, (repoId, fileContent)) =>
-          val tokenListTry = Try(getTokensForFile(fileContent))
-          var tokenList: java.util.List[String] = new java.util.ArrayList[String]()
-          if (tokenListTry.isSuccess) {
-            tokenList = tokenListTry.get
-          }
-          val tokens = tokenList.map { t =>
-            new Node(t, fileNameVsId.get(repoId.toString() + ":" + fileName).get)
-          }
-          tokens
-      })
-    val wordIdOffset = fileNameVsId.size + repoNameVsId.size + offset
+      case (fileName, (repoId, fileContent)) =>
+        val paragraphListTry = Try(getParagraphForFile(fileContent))
+        var paragraphList: java.util.List[String] = new java.util.ArrayList[String]()
+        if (paragraphListTry.isSuccess) {
+          paragraphList = paragraphListTry.get
+        }
+        val paragraphTokens = paragraphList.distinct.map { t =>
+          new Node(t, Array(fileNameVsId.get(repoId.toString() + ":" + fileName).get,repoId))
+        }
+        paragraphTokens
+    }).distinct()
+
+    val paragraphVertices = paragraph.map(f => (f,"")).keys.zipWithIndex().map({
+      case (paragraphNode,paragraphId) =>
+        (paragraphId + paragraphIdOffset, paragraphNode)
+    })
+
+    val words = paragraphVertices.flatMap{
+      case (k,v) =>
+      val tokens =  v.name.split(" ").map { t =>
+        new Node(t, Array(k))
+      }
+      tokens
+    }
+
+    val wordIdOffset = fileNameVsId.size + repoNameVsId.size + paragraphVertices.collect().size + offset
     val wordVocab = words.map(f => (f.name, "")).aggregateByKey(0)((x, y) => 0, (l, r) => 0)
       .keys.zipWithIndex().map({
         case (word, wordId) =>
           (word, wordId + wordIdOffset)
       }).collect().toMap
-    val tokenToWordMap = wordVocab.map({ case (word, wordId) => (wordId, word) }).toMap
 
-    val edges = words.map(f => (wordVocab.get(f.name).get, f.parentId)).cache()
-    val docGroupings = fileVertices.map({
-      case ((fileId, fileNode)) =>
-        (fileId, fileNode.parentId)
-    }).cache()
+    val tokenToWordMap = wordVocab.map({ case (word, wordId) => (wordId, word) }).toMap
+    val edges = words.map(f => (wordVocab.get(f.name).get, f.parentId(0))).cache()
+
+    val paragraphGroupings = paragraphVertices.flatMap({
+      case (paragraphId, paragraphNode) =>
+        List((paragraphId, paragraphNode.parentId(0))) ++ List((paragraphId, paragraphNode.parentId(1)))
+    }).distinct().cache()
+
     val result = new LDA().setMaxIterations(nIterations)
       .setK(nbgTopics).setCheckPointInterval(chkptInterval)
-      .runFromEdges(edges, Option(docGroupings));
+      .runFromEdges(edges, Option(paragraphGroupings))
     handleResult(result, sc, repoIdVsName, tokenToWordMap, repoIdVsDocIdMap, fileIdVsName)
   }
 
@@ -214,9 +237,9 @@ object CreateTopicModelJob extends Logger {
         Map("_id" -> repoId) ++  termMap ++ topicMap
       })
 
-    updatedRepoRDD.saveToEs(KodeBeagleConfig.esRepoTopicIndex,
+   /* updatedRepoRDD.saveToEs(KodeBeagleConfig.esRepoTopicIndex,
       Map("es.write.operation" -> "upsert", 
-          "es.mapping.id" -> "_id"))
+          "es.mapping.id" -> "_id"))*/
   }
 
   def logTopics(topics: Array[Array[(Int, Long)]],
@@ -250,24 +273,25 @@ object CreateTopicModelJob extends Logger {
 
   }
 
-  def getTokensForFile(fileContent: String): java.util.List[String] = {
+  def getParagraphForFile(fileContent: String): java.util.List[String] = {
     val tcv = new TreeCreatorVisitor();
     val ext = new JavaASTExtractor(false, true);
     val node = ext.getAST(fileContent, ParseType.COMPILATION_UNIT).asInstanceOf[CompilationUnit];
     tcv.process(node, fileContent, new Settings);
 
-    val tokenList = new ArrayList[String]();
+    val tokenList = new ArrayList[String]()
     val nodeCount = tcv.getTree().getNodeCount()
 
     var nodeID = 0;
     // Save foldable node tokens ordered by nodeID
     for (nodeID <- 0 until nodeCount) {
+      val sb = new StringBuilder()
       for (s <- tcv.getIDTokens().get(nodeID)) {
-        tokenList.add(s);
+        sb.append(s + " ")
       }
-
+      tokenList.add(sb.toString())
     }
-    tokenList;
+    tokenList
   }
 
   def extractVocab(tokens: RDD[Node],
@@ -284,5 +308,4 @@ object CreateTopicModelJob extends Logger {
     }
     (vocabLookup, vocabLookup.map({ case (name, id) => (id, name) }), nodesWithIds)
   }
-
 }

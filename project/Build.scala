@@ -22,6 +22,8 @@ import sbt.Keys._
 import de.johoop.findbugs4sbt.FindBugs._
 import de.johoop.cpd4sbt.CopyPasteDetector._
 import de.johoop.cpd4sbt.Language
+import sbtassembly._
+import AssemblyKeys._
 
 object KodeBeagleBuild extends Build {
 
@@ -58,12 +60,12 @@ object KodeBeagleBuild extends Build {
 
   def pluginSettings = kodebeagleSettings ++ (if (ideaLib.isEmpty) Seq() else
     cpdSettings ++ Seq(
-    name := "KodeBeagleIdeaPlugin",
-    libraryDependencies ++= Dependencies.ideaPlugin,
-    autoScalaLibrary := false,
-    cpdLanguage := Language.Java,
-    cpdMinimumTokens := 30,
-    unmanagedBase := file(ideaLib.get)
+      name := "KodeBeagleIdeaPlugin",
+      libraryDependencies ++= Dependencies.ideaPlugin,
+      autoScalaLibrary := false,
+      cpdLanguage := Language.Java,
+      cpdMinimumTokens := 30,
+      unmanagedBase := file(ideaLib.get)
     ))
 
   def pluginSettingsFull = pluginSettings ++ (if (ideaLib.isEmpty) Seq() else Seq(
@@ -80,7 +82,7 @@ object KodeBeagleBuild extends Build {
     libraryDependencies ++= Dependencies.ideaPluginTest,
     autoScalaLibrary := true,
     scalaVersion := "2.11.6"
-    )
+  )
 
   def coreSettings = kodebeagleSettings ++ Seq(libraryDependencies ++= Dependencies.kodebeagle)
 
@@ -97,49 +99,57 @@ object KodeBeagleBuild extends Build {
       updateOptions := updateOptions.value.withLatestSnapshots(false),
       crossPaths := false,
       fork := true,
-      javacOptions ++= Seq("-source", "1.7"),
-      javaOptions += "-Xmx6048m",
-      javaOptions += "-XX:+HeapDumpOnOutOfMemoryError"
+      javacOptions ++= Seq("-source", "1.8"),
+      javaOptions += "-Xmx2048m",
+      javaOptions += "-XX:+HeapDumpOnOutOfMemoryError",
+      assemblyMergeStrategy in assembly := {
+        case "plugin.properties" |"plugin.xml" |".api_description" | "META-INF/eclipse.inf" | ".options"   => MergeStrategy.first
+        case x =>
+          val oldStrategy = (assemblyMergeStrategy in assembly).value
+          oldStrategy(x)
+      }
     )
 
 }
 
 object Dependencies {
 
-  val spark = "org.apache.spark" %% "spark-core" % "1.4.1"
-//"org.apache.spark" %% "spark-core" % "1.3.1" // % "provided" Provided makes it not run through sbt run.
+  val spark = "org.apache.spark" %% "spark-core" % "1.4.1"  //% "provided"
+  //"org.apache.spark" %% "spark-core" % "1.3.1" // % "provided" Provided makes it not run through sbt run.
   val parserCombinator = "org.scala-lang.modules" %% "scala-parser-combinators" % "1.0.3"
-  val scalaTest = "org.scalatest" %% "scalatest" % "2.2.4" % "test" 
+  val scalaTest = "org.scalatest" %% "scalatest" % "2.2.4" % "test"
   val slf4j = "org.slf4j" % "slf4j-log4j12" % "1.7.10"
   val javaparser = "com.github.javaparser" % "javaparser-core" % "2.0.0"
   val json4s = "org.json4s" %% "json4s-ast" % "3.2.10"
   val json4sJackson = "org.json4s" %% "json4s-jackson" % "3.2.10"
   val httpClient = "commons-httpclient" % "commons-httpclient" % "3.1"
   val config = "com.typesafe" % "config" % "1.2.1"
-  val jgit = "org.eclipse.jgit" % "org.eclipse.jgit" % "3.7.0.201502260915-r"
+  val jgit = "org.eclipse.jgit" % "org.eclipse.jgit" % "3.7.0.201502260915-r" intransitive()
   val commonsIO = "commons-io" % "commons-io" % "2.4"
-  val esSpark = "org.elasticsearch" % "elasticsearch-spark_2.11" % "2.1.0.Beta4" 
-  val graphx =  "org.apache.spark" % "spark-graphx_2.11" % "1.4.1" 
+  val esSpark = ("org.elasticsearch" % "elasticsearch-spark_2.11" % "2.1.0.Beta4")
+    //exclude("org.apache.spark", "spark-sql_2.11").exclude("org.apache.spark", "spark-core_2.11")
+  val graphx =  "org.apache.spark" % "spark-graphx_2.11" % "1.4.1" // % "provided"
+  val guava = "com.google.guava" % "guava" % "18.0"
 
-//Eclipse dependencies for Tassal libs
-object EclipseDeps {
-  val tycho =  "org.eclipse.tycho" % "org.eclipse.jdt.core" % "3.10.0.v20140604-1726"
-  val contentType =  "org.eclipse.birt.runtime" % "org.eclipse.core.contenttype" % "3.4.200.v20130326-1255"  
-  val coreJobs =  "org.eclipse.birt.runtime" % "org.eclipse.core.jobs" % "3.5.300.v20130429-1813"
-  val coreResources =  "org.eclipse.birt.runtime" % "org.eclipse.core.resources" % "3.8.101.v20130717-0806"
-  val coreRT =  "org.eclipse.birt.runtime" % "org.eclipse.core.runtime" % "3.9.0.v20130326-1255"
-  val eqCommon =  "org.eclipse.birt.runtime" % "org.eclipse.equinox.common" % "3.6.200.v20130402-1505"                
-  val eqPref =  "org.eclipse.birt.runtime" % "org.eclipse.equinox.preferences" % "3.5.100.v20130422-1538"                
-  val eqReg =  "org.eclipse.birt.runtime" % "org.eclipse.equinox.registry" % "3.5.301.v20130717-1549"
-  val osgi =  "org.eclipse.birt.runtime" % "org.eclipse.osgi" % "3.9.1.v20130814-1242"                
-  val text =  "org.eclipse.text" % "org.eclipse.text" % "3.5.101"
+  //Eclipse dependencies for Tassal libs
+  object EclipseDeps {
+    val tycho =  "org.eclipse.tycho" % "org.eclipse.jdt.core" % "3.10.0.v20140604-1726" intransitive()
+    val contentType =  "org.eclipse.birt.runtime" % "org.eclipse.core.contenttype" % "3.4.200.v20130326-1255" intransitive()
+    val coreJobs =  "org.eclipse.birt.runtime" % "org.eclipse.core.jobs" % "3.5.300.v20130429-1813" intransitive()
+    val coreResources =  "org.eclipse.birt.runtime" % "org.eclipse.core.resources" % "3.8.101.v20130717-0806" intransitive()
+    val coreRT =  "org.eclipse.birt.runtime" % "org.eclipse.core.runtime" % "3.9.0.v20130326-1255" intransitive()
+    val eqCommon =  "org.eclipse.birt.runtime" % "org.eclipse.equinox.common" % "3.6.200.v20130402-1505" intransitive()
+    val eqPref =  "org.eclipse.birt.runtime" % "org.eclipse.equinox.preferences" % "3.5.100.v20130422-1538" intransitive()
+    val eqReg =  "org.eclipse.birt.runtime" % "org.eclipse.equinox.registry" % "3.5.301.v20130717-1549" intransitive()
+    val osgi =  "org.eclipse.birt.runtime" % "org.eclipse.osgi" % "3.9.1.v20130814-1242" intransitive()
+    val text =  "org.eclipse.text" % "org.eclipse.text" % "3.5.101" intransitive()
 
-  val allDeps = Seq(tycho, contentType, coreJobs, coreResources, coreRT, eqCommon, eqPref, eqReg, osgi, text)
-}
+    val allDeps = Seq(tycho, contentType, coreJobs, coreResources, coreRT, eqCommon, eqPref, eqReg, osgi, text)
+  }
 
-  
+
   val kodebeagle = Seq(spark, parserCombinator, scalaTest, slf4j, javaparser, json4s, config,
-    json4sJackson, jgit, commonsIO, esSpark, graphx) ++ EclipseDeps.allDeps
+    json4sJackson, jgit, commonsIO, esSpark, graphx, guava) ++ EclipseDeps.allDeps
 
   val ideaPluginTest = Seq(scalaTest, commonsIO)
   val ideaPlugin = Seq()
