@@ -86,10 +86,13 @@ object CreateTopicModelJob extends Logger {
 
     val repos = sc.esRDD(KodeBeagleConfig.esRepositoryIndex)
     // TODO: How to do this without materializing upfront.
-    val repoIds = repos.map({
+   /* val repoIds = repos.map({
       case ((recordId, valueMap)) =>
         (recordId, valueMap.get("id").get.toString())
-    }).take(10)
+    }).take(20)*/
+
+    val repoIds = Array(("","11384366"),("","206362"),("","2580769"),("","24928494"),("","11543457"),("","2198510"),("","15861701"),("","206402"),("","206384"),
+      ("","206483"),("","206370"),("","2740148"),("","20473418"),("","15928650"),("","2493904"),("","247823"),("","20248084"),("","322018"),("","14135467"),("","160999"))
 
     while ((repoCounter == 0 || fetched == batchSize) && repoCounter >= 0) {
       sc.stop()
@@ -153,11 +156,11 @@ object CreateTopicModelJob extends Logger {
         if (paragraphListTry.isSuccess) {
           paragraphList = paragraphListTry.get
         }
-        val paragraphTokens = paragraphList.distinct.map { t =>
-          new Node(t, Array(fileNameVsId.get(repoId.toString() + ":" + fileName).get,repoId))
+        val paragraphTokens = paragraphList.map { t =>
+          new Node(t, Array(fileNameVsId.get(repoId.toString() + ":" + fileName).get,repoNameVsId.get(repoId.toString()).get))
         }
         paragraphTokens
-    }).distinct()
+    })
 
     val paragraphVertices = paragraph.map(f => (f,"")).keys.zipWithIndex().map({
       case (paragraphNode,paragraphId) =>
@@ -185,7 +188,7 @@ object CreateTopicModelJob extends Logger {
     val paragraphGroupings = paragraphVertices.flatMap({
       case (paragraphId, paragraphNode) =>
         List((paragraphId, paragraphNode.parentId(0))) ++ List((paragraphId, paragraphNode.parentId(1)))
-    }).distinct().cache()
+    }).cache()
 
     val result = new LDA().setMaxIterations(nIterations)
       .setK(nbgTopics).setCheckPointInterval(chkptInterval)
@@ -201,12 +204,13 @@ object CreateTopicModelJob extends Logger {
     fileIdVsName: mutable.Map[Long, String]): Unit = {
 
     val topics = result.describeTopics(nWordsDesc)
+
     logTopics(topics, repoIdVsName, tokenToWordMap)
 
     var i = nbgTopics
     val repoTopics = topics.slice(nbgTopics, topics.length)
     // For each repo, map of topic terms vs their frequencies 
-    val repoTopicFields = for (topic <- repoTopics) yield {
+    val repoTopicFields = for {topic <- repoTopics if i < 23} yield {
       val repoName = repoIdVsName.get(i.toLong).get
       val topicMap = topic.map({
         case (count, wordId) =>
@@ -237,7 +241,7 @@ object CreateTopicModelJob extends Logger {
         Map("_id" -> repoId) ++  termMap ++ topicMap
       })
 
-   /* updatedRepoRDD.saveToEs(KodeBeagleConfig.esRepoTopicIndex,
+   /*updatedRepoRDD.saveToEs(KodeBeagleConfig.esRepoTopicIndex,
       Map("es.write.operation" -> "upsert", 
           "es.mapping.id" -> "_id"))*/
   }
@@ -246,7 +250,8 @@ object CreateTopicModelJob extends Logger {
     repoIdVsName: mutable.Map[Long, String],
     tokenToWordMap: Map[Long, String]): Unit = {
     val minFreq = 0
-    for (i <- 0 until topics.size) {
+
+    for (i <- 0 until 23) {
       var topicName = "Background Topic "
       if (i < nbgTopics) {
         topicName = topicName + i

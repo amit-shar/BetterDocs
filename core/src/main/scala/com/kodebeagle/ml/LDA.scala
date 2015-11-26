@@ -235,7 +235,7 @@ class LDA private (
       assert(max == min,
         s"Each document is not assigned to an equal number of groups. Max: $max, and Min: $min")
       distinctDocPvtTopics = groupedDocs.map(_._2).
-        flatMap { x => x.toList }.distinct().count().toInt
+        flatMap { x => x.toList }.distinct.count().toInt
       perDocPvtTopics = max
       groupedDocsOpt = Option(groupedDocs)
     }

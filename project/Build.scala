@@ -100,7 +100,7 @@ object KodeBeagleBuild extends Build {
       crossPaths := false,
       fork := true,
       javacOptions ++= Seq("-source", "1.8"),
-      javaOptions += "-Xmx2048m",
+      javaOptions += "-Xmx10g",
       javaOptions += "-XX:+HeapDumpOnOutOfMemoryError",
       assemblyMergeStrategy in assembly := {
         case "plugin.properties" |"plugin.xml" |".api_description" | "META-INF/eclipse.inf" | ".options"   => MergeStrategy.first
