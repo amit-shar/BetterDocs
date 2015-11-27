@@ -100,7 +100,7 @@ object KodeBeagleBuild extends Build {
       crossPaths := false,
       fork := true,
       javacOptions ++= Seq("-source", "1.8"),
-      javaOptions += "-Xmx10g",
+      javaOptions += "-Xmx14g",
       javaOptions += "-XX:+HeapDumpOnOutOfMemoryError",
       assemblyMergeStrategy in assembly := {
         case "plugin.properties" |"plugin.xml" |".api_description" | "META-INF/eclipse.inf" | ".options"   => MergeStrategy.first
@@ -128,7 +128,7 @@ object Dependencies {
   val commonsIO = "commons-io" % "commons-io" % "2.4"
   val esSpark = ("org.elasticsearch" % "elasticsearch-spark_2.11" % "2.1.0.Beta4")
     //exclude("org.apache.spark", "spark-sql_2.11").exclude("org.apache.spark", "spark-core_2.11")
-  val graphx =  "org.apache.spark" % "spark-graphx_2.11" % "1.4.1" // % "provided"
+  val graphx =  "org.apache.spark" % "spark-graphx_2.11" % "1.4.1" //% "provided"
   val guava = "com.google.guava" % "guava" % "18.0"
 
   //Eclipse dependencies for Tassal libs

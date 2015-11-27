@@ -84,15 +84,18 @@ object CreateTopicModelJob extends Logger {
     var sc: SparkContext = createSparkContext(conf)
     sc.setCheckpointDir(KodeBeagleConfig.sparkCheckpointDir)
 
-    val repos = sc.esRDD(KodeBeagleConfig.esRepositoryIndex)
+    /*val repos = sc.esRDD(KodeBeagleConfig.esRepositoryIndex)
     // TODO: How to do this without materializing upfront.
-   /* val repoIds = repos.map({
+    val repoIds = repos.map({
       case ((recordId, valueMap)) =>
         (recordId, valueMap.get("id").get.toString())
     }).take(20)*/
 
-    val repoIds = Array(("","11384366"),("","206362"),("","2580769"),("","24928494"),("","11543457"),("","2198510"),("","15861701"),("","206402"),("","206384"),
-      ("","206483"),("","206370"),("","2740148"),("","20473418"),("","15928650"),("","2493904"),("","247823"),("","20248084"),("","322018"),("","14135467"),("","160999"))
+    val repoIds = Array(("AVA34Xi4VXT0wbfNXnmq","11384366"),("AVA4G9BXVXT0wbfN3UwS","206362"),("AVA4Vq8-VXT0wbfNZy1b","2580769"),("AVA3sw_MVXT0wbfN8kIQ","24928494"),
+      ("AVA3-ZMdVXT0wbfNkv4o","11543457"),("AVA39a33VXT0wbfNipRt","2198510"),("AVA4oFF0VXT0wbfNPDEu","15861701"),("AVA3p-ZwVXT0wbfN30OW","206402"),("AVA4iaOWVXT0wbfNAW8A","206384"),
+      ("AVA4XLUBVXT0wbfNeQk-","206483"),("AVA3vLbXVXT0wbfNCkhJ","2740148"),("AVA4tZRYVXT0wbfNZrqb","20473418"),("AVA4XlJ4VXT0wbfNfgLI","15928650"),
+      ("AVA4KPcGVXT0wbfN-cfg","2493904"),("AVA3ttusVXT0wbfN-tWG","247823"),("AVA45eTzVXT0wbfN7wYQ","20248084"),("AVA4YFmIVXT0wbfNhLTv","322018"),
+      ("AVA4xA9gVXT0wbfNj3ZC","14135467"),("AVA3z47AVXT0wbfNN4jp","160999")).take(5)
 
     while ((repoCounter == 0 || fetched == batchSize) && repoCounter >= 0) {
       sc.stop()
@@ -165,7 +168,7 @@ object CreateTopicModelJob extends Logger {
     val paragraphVertices = paragraph.map(f => (f,"")).keys.zipWithIndex().map({
       case (paragraphNode,paragraphId) =>
         (paragraphId + paragraphIdOffset, paragraphNode)
-    })
+    }).cache()
 
     val words = paragraphVertices.flatMap{
       case (k,v) =>
@@ -175,12 +178,12 @@ object CreateTopicModelJob extends Logger {
       tokens
     }
 
-    val wordIdOffset = fileNameVsId.size + repoNameVsId.size + paragraphVertices.collect().size + offset
+    val wordIdOffset = fileNameVsId.size + repoNameVsId.size + paragraphVertices.count() + offset
     val wordVocab = words.map(f => (f.name, "")).aggregateByKey(0)((x, y) => 0, (l, r) => 0)
       .keys.zipWithIndex().map({
         case (word, wordId) =>
           (word, wordId + wordIdOffset)
-      }).collect().toMap
+      }).collectAsMap()
 
     val tokenToWordMap = wordVocab.map({ case (word, wordId) => (wordId, word) }).toMap
     val edges = words.map(f => (wordVocab.get(f.name).get, f.parentId(0))).cache()
@@ -195,7 +198,7 @@ object CreateTopicModelJob extends Logger {
       .runFromEdges(edges, Option(paragraphGroupings))
     handleResult(result, sc, repoIdVsName, tokenToWordMap, repoIdVsDocIdMap, fileIdVsName)
   }
-
+  case class TopicModel(model: Map[String, Object])
   def handleResult(result: DistributedLDAModel,
     sc: SparkContext,
     repoIdVsName: mutable.Map[Long, String],
@@ -240,6 +243,9 @@ object CreateTopicModelJob extends Logger {
         val topicMap = Map(filesFieldName -> esFilesMap)
         Map("_id" -> repoId) ++  termMap ++ topicMap
       })
+    /*import SparkIndexJobHelper._
+    updatedRepoRDD.map(repoRecord => toJson(TopicModel(repoRecord))).
+      saveAsTextFile(TopicModelConfig.saveToLocal + java.util.UUID.randomUUID())*/
 
    /*updatedRepoRDD.saveToEs(KodeBeagleConfig.esRepoTopicIndex,
       Map("es.write.operation" -> "upsert", 
@@ -251,7 +257,7 @@ object CreateTopicModelJob extends Logger {
     tokenToWordMap: Map[Long, String]): Unit = {
     val minFreq = 0
 
-    for (i <- 0 until 23) {
+    for (i <- 0 until batchSize + nbgTopics) {
       var topicName = "Background Topic "
       if (i < nbgTopics) {
         topicName = topicName + i
@@ -269,11 +275,11 @@ object CreateTopicModelJob extends Logger {
     repoIdVsName: mutable.Map[Long, String],
     fileIdVsName: mutable.Map[Long, String]): Unit = {
     repoSummary.groupBy(_._1).foreach(f => {
-      log.info(s"Top docs for repo : ${repoIdVsName.get(f._1).get}")
+      log.info(s"Top docs for repo : ${repoIdVsName.get(f._1).getOrElse("Anonymous")}")
       f._2.sortBy(_._3).filter(f =>
-        !(fileIdVsName.get((f._2 * (-1L) - 1L)).get.contains("test"))).take(20)
+        !(fileIdVsName.get((f._2 * (-1L) - 1L)).getOrElse("Anonymous").contains("test"))).take(20)
         .foreach(f =>
-          log.info(s"${f._3} - ${fileIdVsName.get((f._2 * (-1L) - 1L)).get.split(":")(1)}"))
+          log.info(s"${f._3} - ${fileIdVsName.get((f._2 * (-1L) - 1L)).getOrElse("Anonymous").split(":")(1)}"))
     })
 
   }
