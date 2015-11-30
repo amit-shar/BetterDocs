@@ -144,15 +144,14 @@ object CreateTopicModelJob extends Logger {
     val files = repoSources.map({
       case (repoId, (fileName, fileContent)) =>
         new Node(repoId + ":" + fileName, Array(repoNameVsId.get(repoId.toString()).get))
-    }).distinct()
+    })
     val (fileNameVsId, fileIdVsName, fileVertices) = extractVocab(files, fileIdOffset)
 
     val paragraphIdOffset = fileNameVsId.size + repoNameVsId.size + offset
     val paragraph = repoSources.map({
       case (repoId, (fileName, fileContent)) =>
         (fileName, (repoId, fileContent))
-    }).repartition(sc.defaultParallelism)
-      .flatMap({
+    }).flatMap({
       case (fileName, (repoId, fileContent)) =>
         val paragraphListTry = Try(getParagraphForFile(fileContent))
         var paragraphList: java.util.List[String] = new java.util.ArrayList[String]()

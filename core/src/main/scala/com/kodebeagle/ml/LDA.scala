@@ -222,13 +222,12 @@ class LDA private (
     var groupedDocsOpt: Option[RDD[(DocId, Array[GroupId])]] = None
     // Find out the groups to which each document is assigned. 
     // Their number should be same for all documents
-    println("doc groupings  " +documentGroupings.get.collect().size)
     if (documentGroupings.isDefined) {
       val groupedDocs = documentGroupings.get.map(f => (-(f._1 + 1), f._2)).groupBy(_._1).map({
         case (docId, itr) =>
           (docId, itr.map(_._2).toArray)
       })
-      println(" groupings  " +groupedDocs.collect().size)
+
       val max = groupedDocs.map(_._2.length).max
       val min = groupedDocs.map(_._2.length).min
 
@@ -613,10 +612,10 @@ object LDA {
     def describeTopics(maxTermsPerTopic: Long): Array[Array[(Int, Long)]] = {
       topWords(maxTermsPerTopic.toInt)
     }
-
     def collectTopicTotals(): TopicCounts = throw new NotImplementedError()
 
     def logPrior(): Double = throw new NotImplementedError()
+
 
     def k: Int = nTopics
 
@@ -659,8 +658,7 @@ object LDA {
       val counts = graph.edges.map(e => e.attr)
         .aggregate(new TopicCounts(nTopics + nDocTopics))(combineTopicIntoCounts, combineCounts)
       totalHistogram = Option(makeHistogramFromCounts(
-        graph.edges.map(e => e.attr)
-          .aggregate(new TopicCounts(nTopics + nDocTopics))(combineTopicIntoCounts, combineCounts),
+        counts,
         Array()))
       logInfo("LDA setup finished")
       // timer.stop("setup")
