@@ -216,11 +216,11 @@ class LDA private (
 
   def runFromEdges(edges: RDD[(WordId, DocId)],
     documentGroupings: Option[RDD[(DocId, GroupId)]] = None): DistributedLDAModel = {
-    // No. of document specific topics: should be same for all documents 
+    // No. of document specific topics: should be same for all documents
     var distinctDocPvtTopics = 0
     var perDocPvtTopics = 0
     var groupedDocsOpt: Option[RDD[(DocId, Array[GroupId])]] = None
-    // Find out the groups to which each document is assigned. 
+    // Find out the groups to which each document is assigned.
     // Their number should be same for all documents
     if (documentGroupings.isDefined) {
       val groupedDocs = documentGroupings.get.map(f => (-(f._1 + 1), f._2)).groupBy(_._1).map({
@@ -592,11 +592,11 @@ object LDA {
     val loggingInterval: Int = 0,
     val loggingLikelihood: Boolean = false,
     val loggingTime: Boolean = false) extends LearningState with Serializable with Logging {
-    import GibbsLearningState._  
+    import GibbsLearningState._
     // var timer: TimeTracker = null
     private var sc: Option[SparkContext] = None
     // Create an empty graph to keep scalastyle happy for null.
-    var graph: Graph[Histogram, Topic] = Graph(tokens.sparkContext.emptyRDD[(Long, Histogram)], 
+    var graph: Graph[Histogram, Topic] = Graph(tokens.sparkContext.emptyRDD[(Long, Histogram)],
         tokens.sparkContext.emptyRDD[Edge[Topic]])
     var nWords: Long = 0
     var nDocs: Long = 0
@@ -700,16 +700,16 @@ object LDA {
       var g = Graph(setupDocVertices ++ setupWordVertices, edges)
         .partitionBy(PartitionStrategy.EdgePartition1D)
 
-      // Assign the doc specific topics correctly here.  
+      // Assign the doc specific topics correctly here.
       g = randomTopicCorrection(g, nT)
 
       // end
 
       /* g.triplets.foreach(f=>{
           val curr = getCurrentTopic(f.attr)
-          assert(curr < nT || 
-              (f.dstAttr.docTopics.toSeq.contains(curr) && f.srcAttr.counts(curr) > 0) , 
-              s"Edges not properly setup, indicates a bug." + 
+          assert(curr < nT ||
+              (f.dstAttr.docTopics.toSeq.contains(curr) && f.srcAttr.counts(curr) > 0) ,
+              s"Edges not properly setup, indicates a bug." +
               s"$curr , $nT: nT , available doc topics: ${f.dstAttr.docTopics.mkString(",")}" )
         }) */
       g
@@ -795,7 +795,7 @@ object LDA {
       updateGraph();
       this
     }
-    
+
     def updateGraph(): Unit = {
       var tempTimer = System.nanoTime()
       val deltas = graph.edges
@@ -947,13 +947,13 @@ object LDA {
       val logPWGivenZ =
         nTopics * (Gamma.logGamma(nw * b) - nw * logBeta) -
           totalHistogram.counts.map(v => Gamma.logGamma(v + nw * b)).sum +
-          wordVertices.map({ case (id, histogram) => 
+          wordVertices.map({ case (id, histogram) =>
           histogram.counts.map(v => Gamma.logGamma(v + b)).sum})
             .reduce(_ + _)
       val logPZ =
         nd * (Gamma.logGamma(nt * a) - nt * logAlpha) +
           docVertices.map({ case (id, histogram) =>
-            histogram.counts.map(v => 
+            histogram.counts.map(v =>
             Gamma.logGamma(v + a)).sum - Gamma.logGamma(nt * a + histogram.counts.sum)
           }).reduce(_ + _)
       logPWGivenZ + logPZ */
