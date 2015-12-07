@@ -659,8 +659,7 @@ object LDA {
       val counts = graph.edges.map(e => e.attr)
         .aggregate(new TopicCounts(nTopics + nDocTopics))(combineTopicIntoCounts, combineCounts)
       totalHistogram = Option(makeHistogramFromCounts(
-        graph.edges.map(e => e.attr)
-          .aggregate(new TopicCounts(nTopics + nDocTopics))(combineTopicIntoCounts, combineCounts),
+        counts,
         Array()))
       logInfo("LDA setup finished")
       // timer.stop("setup")

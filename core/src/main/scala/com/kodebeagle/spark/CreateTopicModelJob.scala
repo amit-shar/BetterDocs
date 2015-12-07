@@ -78,7 +78,7 @@ object CreateTopicModelJob extends Logger {
   def main(args: Array[String]): Unit = {
     var repoCounter = 0
     var fetched = 0
-    val conf = new SparkConf().setAppName(jobName)
+    val conf = new SparkConf().setMaster(KodeBeagleConfig.sparkMaster)setAppName(jobName)
     conf.set(esNodesKey, KodeBeagleConfig.esNodes)
     conf.set(esPortKey, KodeBeagleConfig.esPort)
     var sc: SparkContext = createSparkContext(conf)
