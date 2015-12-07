@@ -64,13 +64,13 @@ import org.apache.spark.rdd.EmptyRDD
  */
 
 class LDA private (
-  private var k: Int,
-  private var maxIterations: Int,
-  private var checkPointInterval: Int,
-  private var topicSmoothing: Array[Double],
-  private var termSmoothing: Array[Double],
-  private var seed: Long,
-  private var algorithm: LDA.LearningAlgorithm.LearningAlgorithm) extends Logging {
+                    private var k: Int,
+                    private var maxIterations: Int,
+                    private var checkPointInterval: Int,
+                    private var topicSmoothing: Array[Double],
+                    private var termSmoothing: Array[Double],
+                    private var seed: Long,
+                    private var algorithm: LDA.LearningAlgorithm.LearningAlgorithm) extends Logging {
 
   import LDA._
 
@@ -215,26 +215,25 @@ class LDA private (
   }
 
   def runFromEdges(edges: RDD[(WordId, DocId)],
-    documentGroupings: Option[RDD[(DocId, GroupId)]] = None): DistributedLDAModel = {
-    // No. of document specific topics: should be same for all documents
+                   documentGroupings: Option[RDD[(DocId, GroupId)]] = None): DistributedLDAModel = {
+    // No. of document specific topics: should be same for all documents 
     var distinctDocPvtTopics = 0
     var perDocPvtTopics = 0
     var groupedDocsOpt: Option[RDD[(DocId, Array[GroupId])]] = None
-    // Find out the groups to which each document is assigned.
+    // Find out the groups to which each document is assigned. 
     // Their number should be same for all documents
     if (documentGroupings.isDefined) {
       val groupedDocs = documentGroupings.get.map(f => (-(f._1 + 1), f._2)).groupBy(_._1).map({
         case (docId, itr) =>
           (docId, itr.map(_._2).toArray)
       })
-
       val max = groupedDocs.map(_._2.length).max
       val min = groupedDocs.map(_._2.length).min
 
       assert(max == min,
         s"Each document is not assigned to an equal number of groups. Max: $max, and Min: $min")
       distinctDocPvtTopics = groupedDocs.map(_._2).
-        flatMap { x => x.toList }.distinct.count().toInt
+        flatMap { x => x.toList }.distinct().count().toInt
       perDocPvtTopics = max
       groupedDocsOpt = Option(groupedDocs)
     }
@@ -311,13 +310,13 @@ object LDA {
 
   trait LearningStateInitialization {
     def initialStateFromEdges(edges: RDD[(WordId, DocId)],
-      groupedDocs: Option[RDD[(Long, Array[GroupId])]],
-      k: Int,
-      distinctDocPvtTopics: Int,
-      perDocPvtTopics: Int,
-      alpha: Array[Double],
-      beta: Array[Double],
-      seed: Long): LearningState
+                              groupedDocs: Option[RDD[(Long, Array[GroupId])]],
+                              k: Int,
+                              distinctDocPvtTopics: Int,
+                              perDocPvtTopics: Int,
+                              alpha: Array[Double],
+                              beta: Array[Double],
+                              seed: Long): LearningState
   }
 
   object GibbsLearningState extends Serializable with LearningStateInitialization {
@@ -391,8 +390,8 @@ object LDA {
      * @return
      */
     def applyDeltasToHistogram(oldHistogram: Histogram,
-      deltas: Array[Int],
-      vid: Long): Histogram = {
+                               deltas: Array[Int],
+                               vid: Long): Histogram = {
       val counts = new TopicCounts(oldHistogram.counts.length)
       var i = 0
       while (i < counts.length) {
@@ -459,9 +458,9 @@ object LDA {
      * @return RDD of edges between words and documents representing tokens.
      */
     def edgesFromTextDocLines(lines: RDD[String],
-      vocab: Array[String],
-      vocabLookup: mutable.Map[String, WordId],
-      delimiter: String = " "): RDD[(WordId, DocId)] = {
+                              vocab: Array[String],
+                              vocabLookup: mutable.Map[String, WordId],
+                              delimiter: String = " "): RDD[(WordId, DocId)] = {
       val sc = lines.sparkContext
       val numDocs = lines.count()
       val docsWithIds = lines.zipWithUniqueId()
@@ -485,15 +484,15 @@ object LDA {
      * @return New topic for token/triplet
      */
     def sampleToken(randomDouble: Double,
-      topic: Topic,
-      docHistogram: Histogram,
-      wordHistogram: Histogram,
-      totalHistogram: Histogram,
-      nt: Int,
-      pvtTopics: Array[Long],
-      alpha: Array[Double],
-      beta: Array[Double],
-      nw: Long): Topic = {
+                    topic: Topic,
+                    docHistogram: Histogram,
+                    wordHistogram: Histogram,
+                    totalHistogram: Histogram,
+                    nt: Int,
+                    pvtTopics: Array[Long],
+                    alpha: Array[Double],
+                    beta: Array[Double],
+                    nw: Long): Topic = {
       val totalCounts = totalHistogram.counts
       val wHist = wordHistogram.counts
       val dHist = docHistogram.counts
@@ -542,10 +541,10 @@ object LDA {
     }
 
     def vertices(edges: RDD[Edge[Topic]],
-      getVertex: Edge[Topic] => VertexId,
-      nTopics: Int,
-      nDocTopics: Int,
-      vertexType: VertexId): RDD[(Long, Histogram)] = {
+                 getVertex: Edge[Topic] => VertexId,
+                 nTopics: Int,
+                 nDocTopics: Int,
+                 vertexType: VertexId): RDD[(Long, Histogram)] = {
       edges.map { e => (getVertex(e), e) }.aggregateByKey(makeEmptyHistogram(nTopics, nDocTopics))({
         case (histogram, edge) =>
           val t = getCurrentTopic(edge.attr)
@@ -558,13 +557,13 @@ object LDA {
     }
 
     def initialStateFromEdges(edges: RDD[(WordId, DocId)],
-      groupedDocs: Option[RDD[(Long, Array[GroupId])]],
-      k: Int,
-      distinctDocPvtTopics: Int,
-      perDocPvtTopics: Int,
-      alpha: Array[Double],
-      beta: Array[Double],
-      seed: Long): GibbsLearningState = {
+                              groupedDocs: Option[RDD[(Long, Array[GroupId])]],
+                              k: Int,
+                              distinctDocPvtTopics: Int,
+                              perDocPvtTopics: Int,
+                              alpha: Array[Double],
+                              beta: Array[Double],
+                              seed: Long): GibbsLearningState = {
       val state = new GibbsLearningState(edges, groupedDocs, k,
         distinctDocPvtTopics, perDocPvtTopics, alpha, beta)
       state.setup()
@@ -583,21 +582,21 @@ object LDA {
    * @param loggingTime if true, log the runtime of each component
    */
   private[ml] class GibbsLearningState(@transient val tokens: RDD[(WordId, DocId)],
-    @transient val docGroups: Option[RDD[(Long, Array[GroupId])]],
-    val nTopics: Int = 100,
-    val nDocTopics: Int = 0,
-    val nPrivateTopics: Int = 0,
-    val alpha: Array[Double],
-    val beta: Array[Double],
-    val loggingInterval: Int = 0,
-    val loggingLikelihood: Boolean = false,
-    val loggingTime: Boolean = false) extends LearningState with Serializable with Logging {
+                                       @transient val docGroups: Option[RDD[(Long, Array[GroupId])]],
+                                       val nTopics: Int = 100,
+                                       val nDocTopics: Int = 0,
+                                       val nPrivateTopics: Int = 0,
+                                       val alpha: Array[Double],
+                                       val beta: Array[Double],
+                                       val loggingInterval: Int = 0,
+                                       val loggingLikelihood: Boolean = false,
+                                       val loggingTime: Boolean = false) extends LearningState with Serializable with Logging {
     import GibbsLearningState._
     // var timer: TimeTracker = null
     private var sc: Option[SparkContext] = None
     // Create an empty graph to keep scalastyle happy for null.
     var graph: Graph[Histogram, Topic] = Graph(tokens.sparkContext.emptyRDD[(Long, Histogram)],
-        tokens.sparkContext.emptyRDD[Edge[Topic]])
+      tokens.sparkContext.emptyRDD[Edge[Topic]])
     var nWords: Long = 0
     var nDocs: Long = 0
     var nTokens: Long = 0
@@ -612,10 +611,10 @@ object LDA {
     def describeTopics(maxTermsPerTopic: Long): Array[Array[(Int, Long)]] = {
       topWords(maxTermsPerTopic.toInt)
     }
+
     def collectTopicTotals(): TopicCounts = throw new NotImplementedError()
 
     def logPrior(): Double = throw new NotImplementedError()
-
 
     def k: Int = nTopics
 
@@ -700,16 +699,16 @@ object LDA {
       var g = Graph(setupDocVertices ++ setupWordVertices, edges)
         .partitionBy(PartitionStrategy.EdgePartition1D)
 
-      // Assign the doc specific topics correctly here.
+      // Assign the doc specific topics correctly here.  
       g = randomTopicCorrection(g, nT)
 
       // end
 
       /* g.triplets.foreach(f=>{
           val curr = getCurrentTopic(f.attr)
-          assert(curr < nT ||
-              (f.dstAttr.docTopics.toSeq.contains(curr) && f.srcAttr.counts(curr) > 0) ,
-              s"Edges not properly setup, indicates a bug." +
+          assert(curr < nT || 
+              (f.dstAttr.docTopics.toSeq.contains(curr) && f.srcAttr.counts(curr) > 0) , 
+              s"Edges not properly setup, indicates a bug." + 
               s"$curr , $nT: nT , available doc topics: ${f.dstAttr.docTopics.mkString(",")}" )
         }) */
       g
@@ -800,15 +799,15 @@ object LDA {
       var tempTimer = System.nanoTime()
       val deltas = graph.edges
         .flatMap(e => {
-          val topic = e.attr
-          val old = getOldTopic(topic)
-          val current = getCurrentTopic(topic)
-          var result: Iterator[(VertexId, Topic)] = Iterator.empty
-          if (old != current) {
-            result = Iterator((e.srcId, e.attr), (e.dstId, e.attr))
-          }
-          result
-        })
+        val topic = e.attr
+        val old = getOldTopic(topic)
+        val current = getCurrentTopic(topic)
+        var result: Iterator[(VertexId, Topic)] = Iterator.empty
+        if (old != current) {
+          result = Iterator((e.srcId, e.attr), (e.dstId, e.attr))
+        }
+        result
+      })
         .aggregateByKey(new Array[Int](nTopics + nDocTopics))(combineDeltaIntoCounts, combineCounts)
         .cache()
 
@@ -947,13 +946,13 @@ object LDA {
       val logPWGivenZ =
         nTopics * (Gamma.logGamma(nw * b) - nw * logBeta) -
           totalHistogram.counts.map(v => Gamma.logGamma(v + nw * b)).sum +
-          wordVertices.map({ case (id, histogram) =>
+          wordVertices.map({ case (id, histogram) => 
           histogram.counts.map(v => Gamma.logGamma(v + b)).sum})
             .reduce(_ + _)
       val logPZ =
         nd * (Gamma.logGamma(nt * a) - nt * logAlpha) +
           docVertices.map({ case (id, histogram) =>
-            histogram.counts.map(v =>
+            histogram.counts.map(v => 
             Gamma.logGamma(v + a)).sum - Gamma.logGamma(nt * a + histogram.counts.sum)
           }).reduce(_ + _)
       logPWGivenZ + logPZ */
