@@ -17,26 +17,15 @@
 
 package com.kodebeagle.ml
 
-import scala.Iterator
-import scala.annotation.elidable
-import scala.annotation.elidable.ASSERTION
-import scala.collection.mutable
 import org.apache.commons.lang.NotImplementedException
-import org.apache.spark.Logging
-import org.apache.spark.SparkContext
-import org.apache.spark.graphx.Edge
-import org.apache.spark.graphx.EdgeTriplet
-import org.apache.spark.graphx.Graph
-import org.apache.spark.graphx.PartitionID
-import org.apache.spark.graphx.PartitionStrategy
-import org.apache.spark.graphx.TripletFields
-import org.apache.spark.graphx.VertexId
-import org.apache.spark.graphx.VertexRDD
+import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.graphx.{Edge, EdgeTriplet, Graph, PartitionID, PartitionStrategy, TripletFields, VertexId, VertexRDD}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.RDD.rddToPairRDDFunctions
-import scala.util.Random
+
+import scala.collection.mutable
 import scala.collection.mutable.PriorityQueue
-import org.apache.spark.rdd.EmptyRDD
+import scala.util.Random
 
 /**
  *
@@ -331,7 +320,11 @@ object LDA {
      */
     type Topic = Long
 
-    case class Histogram(counts: TopicCounts, docTopics: Array[Long]) extends Serializable
+    case class Histogram(counts: TopicCounts, docTopics: Array[Long]) extends Serializable {
+      override def toString: String = {
+        docTopics.toList.mkString(",")
+      }
+    }
 
     case class Posterior(docs: VertexRDD[Histogram], words: VertexRDD[Histogram])
 
@@ -682,7 +675,7 @@ object LDA {
               Edge(wordId, newDocId, combineTopics(gen.nextInt(nT + nPt), 0))
           })
       })
-      edges.cache
+      edges.persist()
       val setupWordVertices = vertices(edges, _.srcId, nT + nd, nPt, IndexFalse)
       var setupDocVertices = vertices(edges, _.dstId, nT + nd, nPt, IndexTrue)
 
@@ -711,6 +704,7 @@ object LDA {
               s"Edges not properly setup, indicates a bug." + 
               s"$curr , $nT: nT , available doc topics: ${f.dstAttr.docTopics.mkString(",")}" )
         }) */
+      edges.unpersist()
       g
     }
 
@@ -791,7 +785,7 @@ object LDA {
       }
 
       // Update the counts
-      updateGraph();
+      updateGraph()
       this
     }
 
@@ -809,7 +803,6 @@ object LDA {
         result
       })
         .aggregateByKey(new Array[Int](nTopics + nDocTopics))(combineDeltaIntoCounts, combineCounts)
-        .cache()
 
       graph = graph.outerJoinVertices(deltas)({ (vid, oldHistogram, vertexDeltasOption) =>
         if (vertexDeltasOption.isDefined) {
@@ -826,7 +819,6 @@ object LDA {
         graph.cache().triplets.count()
         updateCountsTimes.get += System.nanoTime() - tempTimer
       }
-
       // Recompute the global counts (the actual action)
       tempTimer = System.nanoTime()
       totalHistogram = Option(makeHistogramFromCounts(graph.edges.map(e => e.attr)
@@ -873,7 +865,7 @@ object LDA {
       }).map(q => q.take(count).toArray)
     }
 
-    def summarizeDocGroups(i: Int = 0): Array[(GroupId, DocId, Double)] = {
+    /*def summarizeDocGroups(i: Int = 0): Array[(GroupId, DocId, Double)] = {
       val a = alpha
       val b = beta
       val nt = nTopics
@@ -896,7 +888,7 @@ object LDA {
             val docHist = doc.counts
             groupTopicIndex = doc.docTopics(i)
             val w = wordHist(groupTopicIndex.toInt)
-            val d = docHist(groupTopicIndex.toInt) //
+            val d = docHist(groupTopicIndex.toInt)
             val total = totalHist.value.get.counts(groupTopicIndex.toInt)
             val phi = (b(nt + i) + w) / (b(nt + i) * nw + total)
             val wordProbInDoc = docWordCount.toDouble / doc.counts.sum.toDouble
@@ -923,6 +915,25 @@ object LDA {
           (groupTopicIndex, docId, klScore)
       })
       docKLScores.collect()
+    }*/
+
+    def summarizeDocGroups(i: Int = 0): Array[(GroupId, DocId, Double)] = {
+      val didVsSrc = graph.triplets.map(f => (f.dstId, f.srcAttr.counts)).groupBy(_._1)
+      val docTriplets = graph.triplets.groupBy(f => (f.dstId))
+      val res = docTriplets.join(didVsSrc)
+
+      res.groupBy(_._2._1.head.dstAttr.docTopics(0)).map {
+        case (docId, v) =>
+          val repoId = v.head._2._1.head.dstAttr.docTopics(1)
+          val m = v.flatMap {
+            case (x, (y, z)) =>
+              z.map(a => (a._2(0), a._2(1)))
+          }
+          val backgTopic = m.map(_._1).sum
+          val repotopic = m.map(_._2).sum
+          val klscore = repotopic.toDouble / (backgTopic + repotopic)
+          (repoId, docId * -1, klscore)
+      }.collect()
     }
     /**
      * Creates the posterior distribution for sampling from the vertices

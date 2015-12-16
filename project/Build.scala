@@ -114,7 +114,7 @@ object KodeBeagleBuild extends Build {
 
 object Dependencies {
 
-  val spark = "org.apache.spark" %% "spark-core" % "1.4.1" //%"provided"
+  val spark = "org.apache.spark" %% "spark-core" % "1.4.1" %"provided"
   //"org.apache.spark" %% "spark-core" % "1.3.1" // % "provided" Provided makes it not run through sbt run.
   val parserCombinator = "org.scala-lang.modules" %% "scala-parser-combinators" % "1.0.3"
   val scalaTest = "org.scalatest" %% "scalatest" % "2.2.4" % "test"
@@ -126,9 +126,9 @@ object Dependencies {
   val config = "com.typesafe" % "config" % "1.2.1"
   val jgit = "org.eclipse.jgit" % "org.eclipse.jgit" % "3.7.0.201502260915-r" intransitive()
   val commonsIO = "commons-io" % "commons-io" % "2.4"
-  val esSpark = ("org.elasticsearch" % "elasticsearch-spark_2.11" % "2.1.0.Beta4")
-    //exclude("org.apache.spark", "spark-sql_2.11").exclude("org.apache.spark", "spark-core_2.11")
-  val graphx =  "org.apache.spark" % "spark-graphx_2.11" % "1.4.1" //% "provided"
+  val esSpark = ("org.elasticsearch" % "elasticsearch-spark_2.11" % "2.1.0.Beta4").
+    exclude("org.apache.spark", "spark-sql_2.11").exclude("org.apache.spark", "spark-core_2.11")
+  val graphx =  "org.apache.spark" % "spark-graphx_2.11" % "1.4.1" % "provided"
   val guava = "com.google.guava" % "guava" % "18.0"
 
   //Eclipse dependencies for Tassal libs
