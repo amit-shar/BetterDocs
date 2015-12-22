@@ -17,15 +17,27 @@
 
 package com.kodebeagle.ml
 
+import scala.Iterator
+import scala.annotation.elidable
+import scala.annotation.elidable.ASSERTION
+import scala.collection.mutable
 import org.apache.commons.lang.NotImplementedException
-import org.apache.spark.{Logging, SparkContext}
-import org.apache.spark.graphx.{Edge, EdgeTriplet, Graph, PartitionID, PartitionStrategy, TripletFields, VertexId, VertexRDD}
+import org.apache.spark.Logging
+import org.apache.spark.SparkContext
+import org.apache.spark.graphx.Edge
+import org.apache.spark.graphx.EdgeTriplet
+import org.apache.spark.graphx.Graph
+import org.apache.spark.graphx.PartitionID
+import org.apache.spark.graphx.PartitionStrategy
+import org.apache.spark.graphx.TripletFields
+import org.apache.spark.graphx.VertexId
+import org.apache.spark.graphx.VertexRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.RDD.rddToPairRDDFunctions
-
-import scala.collection.mutable
-import scala.collection.mutable.PriorityQueue
 import scala.util.Random
+import scala.collection.mutable.PriorityQueue
+import org.apache.spark.rdd.EmptyRDD
+import org.apache.commons.math.special.Gamma
 
 /**
  *
@@ -59,13 +71,15 @@ class LDA private (
                     private var topicSmoothing: Array[Double],
                     private var termSmoothing: Array[Double],
                     private var seed: Long,
-                    private var algorithm: LDA.LearningAlgorithm.LearningAlgorithm) extends Logging {
+                    private var algorithm: LDA.LearningAlgorithm.LearningAlgorithm,
+                    private var logStats: Boolean,
+                    private var paramOptimizeInterval: Int) extends Logging {
 
   import LDA._
 
   def this() = this(k = 3, maxIterations = 20, checkPointInterval = 100,
     topicSmoothing = Array(), termSmoothing = Array(), seed = Random.nextLong(),
-    algorithm = LDA.LearningAlgorithm.Gibbs)
+    algorithm = LDA.LearningAlgorithm.Gibbs, logStats = false, paramOptimizeInterval = 100)
 
   /**
    * Number of background topics to infer.  I.e., the number of soft cluster centers.
@@ -79,6 +93,19 @@ class LDA private (
     this
   }
 
+  def getLogStats: Boolean = logStats
+
+  def setLogStats(logStats: Boolean): this.type = {
+    this.logStats = logStats
+    this
+  }
+
+  def getParamOptimizeInterval: Int = paramOptimizeInterval
+
+  def setParamOptimizeInterval(paramOptimizeInterval: Int): this.type = {
+    this.paramOptimizeInterval = paramOptimizeInterval
+    this
+  }
   /**
    * Topic smoothing parameter (commonly named "alpha").
    *
@@ -218,7 +245,6 @@ class LDA private (
       })
       val max = groupedDocs.map(_._2.length).max
       val min = groupedDocs.map(_._2.length).min
-
       assert(max == min,
         s"Each document is not assigned to an equal number of groups. Max: $max, and Min: $min")
       distinctDocPvtTopics = groupedDocs.map(_._2).
@@ -247,8 +273,14 @@ class LDA private (
     var iter = 0
     while (iter < maxIterations) {
       if (iter % checkPointInterval == 0 && iter > 0) checkpoint(state)
+      if (paramOptimizeInterval > 0 && iter % paramOptimizeInterval ==0){
+        state.optimizeParams()
+      }
       state = state.next()
       iter += 1
+    }
+    if(logStats) {
+      state.logPerformanceStatistics()
     }
     new DistributedLDAModel(state)
   }
@@ -293,6 +325,7 @@ object LDA {
     def describeTopics(maxTermsPerTopic: Long): Array[Array[(Int, Long)]]
     def summarizeDocGroups(groupIndex: Int): Array[(GroupId, DocId, Double)]
     def next(): LearningState
+    def optimizeParams(): Unit
     def vocabSize(): Long
     def k: Int
   }
@@ -320,11 +353,7 @@ object LDA {
      */
     type Topic = Long
 
-    case class Histogram(counts: TopicCounts, docTopics: Array[Long]) extends Serializable {
-      override def toString: String = {
-        docTopics.toList.mkString(",")
-      }
-    }
+    case class Histogram(counts: TopicCounts, docTopics: Array[Long]) extends Serializable
 
     case class Posterior(docs: VertexRDD[Histogram], words: VertexRDD[Histogram])
 
@@ -494,6 +523,8 @@ object LDA {
       assert(wHist(oldTopic) > 0,
         "Illegal state: word assigned to topic for which histogram count is 0.")
       assert(dHist(oldTopic) > 0)
+      assert(dHist(oldTopic) > 0,
+        "Illegal state: word in doc assigned to topic for which histogram count is 0.")
       assert(totalCounts(oldTopic) > 0)
       assert(nVisibleTopics == alpha.length && nVisibleTopics == beta.length)
       // Construct the conditional
@@ -541,7 +572,7 @@ object LDA {
       edges.map { e => (getVertex(e), e) }.aggregateByKey(makeEmptyHistogram(nTopics, nDocTopics))({
         case (histogram, edge) =>
           val t = getCurrentTopic(edge.attr)
-          histogram.counts(t) += 1
+            histogram.counts(t) += 1
           histogram
       }, {
         case (l, r) =>
@@ -558,7 +589,7 @@ object LDA {
                               beta: Array[Double],
                               seed: Long): GibbsLearningState = {
       val state = new GibbsLearningState(edges, groupedDocs, k,
-        distinctDocPvtTopics, perDocPvtTopics, alpha, beta)
+        distinctDocPvtTopics, perDocPvtTopics, alpha, beta, 100, false, false)
       state.setup()
       state
     }
@@ -662,20 +693,30 @@ object LDA {
       val nT = nTopics
       val nd = nDocTopics
       val nPt = nPrivateTopics
-      // To setup a bipartite graph it is necessary to ensure that the document and
-      // word ids are in a different namespace
-      val edges: RDD[Edge[Topic]] = tokens.mapPartitionsWithIndex({
+      // Make the docids positive here.
+      val dg = docGroups.get.map(f => (-f._1-1, f._2))
+      val edges: RDD[Edge[Topic]] = tokens.map({
+        case(wid, did)=> (did, wid) // just reverse it
+      }).leftOuterJoin(dg).mapPartitionsWithIndex({
+        // join the each edge tuple with its doc groups  
         case (pid, iterator) =>
-          val gen = new java.util.Random(pid)
           iterator.map({
-            case (wordId, docId) =>
+            case (docId, (wordId, groups)) =>
               assert(wordId >= 0)
               assert(docId >= 0)
               val newDocId: DocId = -(docId + 1L)
-              Edge(wordId, newDocId, combineTopics(gen.nextInt(nT + nPt), 0))
+              val gen = new java.util.Random(wordId)
+              var selectedIndex = gen.nextInt(nT + nPt)
+              // If index more than bgtopics, then chose that topic from groupids
+              val docTopicIndex = selectedIndex - nT
+              if (docTopicIndex >= 0 ) {
+                selectedIndex = groups.get(docTopicIndex).toInt
+              }
+              Edge(wordId, newDocId, combineTopics(selectedIndex, 0))
           })
       })
-      edges.persist()
+      edges.cache
+
       val setupWordVertices = vertices(edges, _.srcId, nT + nd, nPt, IndexFalse)
       var setupDocVertices = vertices(edges, _.dstId, nT + nd, nPt, IndexTrue)
 
@@ -685,69 +726,23 @@ object LDA {
           case (docId, (histogram, docArr)) =>
             (docId, Histogram(histogram.counts, docArr.get))
         })
-
         setupDocVertices = docVerticesWithGroups
       }
-
       var g = Graph(setupDocVertices ++ setupWordVertices, edges)
         .partitionBy(PartitionStrategy.EdgePartition1D)
 
-      // Assign the doc specific topics correctly here.  
-      g = randomTopicCorrection(g, nT)
-
-      // end
-
-      /* g.triplets.foreach(f=>{
-          val curr = getCurrentTopic(f.attr)
-          assert(curr < nT || 
-              (f.dstAttr.docTopics.toSeq.contains(curr) && f.srcAttr.counts(curr) > 0) , 
-              s"Edges not properly setup, indicates a bug." + 
-              s"$curr , $nT: nT , available doc topics: ${f.dstAttr.docTopics.mkString(",")}" )
-        }) */
-      edges.unpersist()
-      g
-    }
-
-    def randomTopicCorrection(graph: Graph[Histogram, Topic], nT: Int): Graph[Histogram, Topic] = {
-      var g = graph.mapTriplets(et => {
-        val curr = getCurrentTopic(et.attr)
-        val docTopicIndex = curr - nT
-        if (docTopicIndex >= 0) {
-          val properTopic = et.dstAttr.docTopics(docTopicIndex).toInt
-          // Assign proper doc topic id
-          et.attr = combineTopics(properTopic, curr)
-        }
-        et.attr
-      }).cache
-
-      // start : update histograms where words were reassigned to doc specific topics.
-      // TODO: Use the same methods as in next()
-      val deltas = g.edges.flatMap(e => {
-        val topic = e.attr
-        val old = getOldTopic(topic)
-        val current = getCurrentTopic(topic)
-        var result: Iterator[(VertexId, Topic)] = Iterator.empty
-        if (old != current && old != 0) {
-          result = Iterator((e.srcId, e.attr), (e.dstId, e.attr))
-        }
-        result
-      }).aggregateByKey(new Array[Int](nT + nDocTopics))(combineDeltaIntoCounts, combineCounts)
-
-      g = g.outerJoinVertices(deltas)({ (vid, oldHistogram, vertexDeltasOption) =>
-        if (vertexDeltasOption.isDefined) {
-          val vertexDeltas = vertexDeltasOption.get
-          val histogram = applyDeltasToHistogram(oldHistogram, vertexDeltas, vid)
-          histogram
-        } else {
-          Histogram(oldHistogram.counts, oldHistogram.docTopics)
-        }
-      }).cache()
-
+      /*g.triplets.foreach(f=>{
+        val curr = getCurrentTopic(f.attr)
+        assert(f.srcAttr.counts(curr) > 0, "Edge assigned topic but no count at the word vertex.")
+        assert(f.dstAttr.counts(curr) > 0, "Edge assigned topic but no count at the doc vertex.")
+        assert(curr < nT || f.dstAttr.docTopics.toSeq.contains(curr),
+          s"Edges not properly setup, indicates a bug." +
+            s"$curr , $nT: nT , available doc topics: ${f.dstAttr.docTopics.mkString(",")}")
+      })*/
       g
     }
 
     def next(): GibbsLearningState = {
-
       // Log the negative log likelihood
       if (loggingLikelihood && iteration % loggingInterval == 0) {
         val likelihood = logLikelihood()
@@ -769,7 +764,8 @@ object LDA {
       val interIter = iteration
       graph = graph.mapTriplets({
         (pid: PartitionID, iter: Iterator[EdgeTriplet[Histogram, Topic]]) =>
-          val gen = new java.util.Random(parts * interIter + pid)
+          val initSeed = parts * interIter + pid
+          val gen = new java.util.Random(initSeed)
           iter.map({ token =>
             val u = gen.nextDouble()
             val newTopic = sampleToken(u, token.attr, token.dstAttr,
@@ -780,12 +776,11 @@ object LDA {
       }, TripletFields.All).cache
 
       if (loggingTime && iteration % loggingInterval == 0 && iteration > 0) {
-        graph.cache().triplets.count()
         resampleTimes.get += System.nanoTime() - tempTimer
       }
 
       // Update the counts
-      updateGraph()
+      updateGraph();
       this
     }
 
@@ -816,9 +811,9 @@ object LDA {
       }).cache()
 
       if (loggingTime && iteration % loggingInterval == 0 && iteration > 0) {
-        graph.cache().triplets.count()
         updateCountsTimes.get += System.nanoTime() - tempTimer
       }
+
       // Recompute the global counts (the actual action)
       tempTimer = System.nanoTime()
       totalHistogram = Option(makeHistogramFromCounts(graph.edges.map(e => e.attr)
@@ -834,6 +829,10 @@ object LDA {
 
     }
 
+    def optimizeParams(): Unit = {
+
+    }
+
     /**
      * Creates an object holding the top counts. The first array is of size number
      * of topics. It contains a list of k elements representing the top words for that topic
@@ -844,6 +843,10 @@ object LDA {
       var k = count
       if (k < 1) k = posterior.words.count().toInt
 
+      topicQueues.map(q => q.take(count).toArray)
+    }
+
+    def topicQueues: Array[PriorityQueue[(Int, WordId)]] = {
       val nt = nTopics + nDocTopics
       graph.vertices.filter({
         case (vid, c) => vid >= 0
@@ -862,60 +865,8 @@ object LDA {
       }).reduce({ (q1, q2) =>
         q1.zip(q2).foreach({ case (a, b) => a ++= b })
         q1
-      }).map(q => q.take(count).toArray)
-    }
-
-    /*def summarizeDocGroups(i: Int = 0): Array[(GroupId, DocId, Double)] = {
-      val a = alpha
-      val b = beta
-      val nt = nTopics
-      val nd = nDocTopics
-      val nw = nWords
-      val totalHist = sc.get.broadcast(totalHistogram)
-      val didVsSrc = graph.triplets.map(f => (f.dstId, f.srcAttr.counts)).groupBy(_._1)
-      val docTriplets = graph.triplets.groupBy(f => (f.dstId))
-      val res = docTriplets.join(didVsSrc)
-      val docKLScores = res.map({
-        case (docId, (itr, srcItr)) =>
-          val docWords = itr.groupBy(f => f.srcId)
-          var groupTopicIndex = -1L
-          var klScore = 0.0
-          docWords.foreach(word => {
-            val docWordCount = itr.size
-            // All elements in this itr point to the same vertex so just take the head
-            val doc = itr.head.dstAttr
-            val wordHist = itr.head.srcAttr.counts
-            val docHist = doc.counts
-            groupTopicIndex = doc.docTopics(i)
-            val w = wordHist(groupTopicIndex.toInt)
-            val d = docHist(groupTopicIndex.toInt)
-            val total = totalHist.value.get.counts(groupTopicIndex.toInt)
-            val phi = (b(nt + i) + w) / (b(nt + i) * nw + total)
-            val wordProbInDoc = docWordCount.toDouble / doc.counts.sum.toDouble
-            klScore += phi * math.log(phi / wordProbInDoc)
-          })
-          // TODO: For now this gets the job done but very very expensive
-          srcItr.foreach({
-            case (did, wordHist) => {
-              if (did != docId) {
-                val w = wordHist(groupTopicIndex.toInt)
-                val total = totalHist.value.get.counts(groupTopicIndex.toInt)
-                var wbg = 0
-                var totalbg = 0
-                for (x <- 0 to nt) {
-                  wbg += wordHist(x)
-                  totalbg += totalHist.value.get.counts(x)
-                }
-                val phi = (b(nt + i) + w) / (b(nt + i) * nw + total)
-                val wordProbInBg = (b(0) + wbg) / (b(0) * nw + totalbg)
-                klScore += phi * math.log(phi / wordProbInBg)
-              }
-            }
-          })
-          (groupTopicIndex, docId, klScore)
       })
-      docKLScores.collect()
-    }*/
+    }
 
     def summarizeDocGroups(i: Int = 0): Array[(GroupId, DocId, Double)] = {
       val didVsSrc = graph.triplets.map(f => (f.dstId, f.srcAttr.counts)).groupBy(_._1)
@@ -930,11 +881,13 @@ object LDA {
               z.map(a => (a._2(0), a._2(1)))
           }
           val backgTopic = m.map(_._1).sum
-          val repotopic = m.map(_._2).sum
-          val klscore = repotopic.toDouble / (backgTopic + repotopic)
-          (repoId, docId * -1, klscore)
+          val repoTopic = m.map(_._2).sum
+          val klScore = repoTopic.toDouble / (backgTopic + repoTopic)
+          (repoId, docId * -1, klScore)
       }.collect()
     }
+
+
     /**
      * Creates the posterior distribution for sampling from the vertices
      * @return Posterior distribution
@@ -946,28 +899,48 @@ object LDA {
       new Posterior(words, docs)
     }
 
+    /**
+     * Log likelihood of the model.
+     * @see H. M. Wallach, Structured Topic Models for Language
+     */
     def logLikelihood(): Double = {
-      /* val nw = nWords
+      val nw = nWords
       val nt = nTopics
       val nd = nDocs
       val a = alpha
       val b = beta
-      val logAlpha = Gamma.logGamma(a)
-      val logBeta = Gamma.logGamma(b)
+      val totalHistogramCounts = totalHistogram.get.counts
+      val logAlpha = Gamma.logGamma(a.sum)
+      val sumBeta = Array.tabulate(totalHistogramCounts.length) { i =>
+        totalHistogramCounts(i) * b(i)
+      }.sum
+      val sigmaLogAlphaK = a.map(f => Gamma.logGamma(f)).foldLeft(0.0)(_ + _)
+
+      val logGamaBetaK = Array.tabulate(totalHistogramCounts.length) { i =>
+        Gamma.logGamma(totalHistogramCounts(i) * b(i))
+      }.sum
       val logPWGivenZ =
-        nTopics * (Gamma.logGamma(nw * b) - nw * logBeta) -
-          totalHistogram.counts.map(v => Gamma.logGamma(v + nw * b)).sum +
-          wordVertices.map({ case (id, histogram) => 
-          histogram.counts.map(v => Gamma.logGamma(v + b)).sum})
+        nTopics * (Gamma.logGamma(sumBeta) - logGamaBetaK) -
+          totalHistogramCounts.map(v => Gamma.logGamma(v + sumBeta)).sum +
+          wordVertices.map({
+            case (id, histogram) =>
+              //histogram.counts.map(v => Gamma.logGamma(v + b(0))).sum
+              Array.tabulate(histogram.counts.length) { i =>
+                Gamma.logGamma(histogram.counts(i) + b(i))
+              }.sum
+          })
             .reduce(_ + _)
       val logPZ =
-        nd * (Gamma.logGamma(nt * a) - nt * logAlpha) +
-          docVertices.map({ case (id, histogram) =>
-            histogram.counts.map(v => 
-            Gamma.logGamma(v + a)).sum - Gamma.logGamma(nt * a + histogram.counts.sum)
+        nd * (logAlpha - sigmaLogAlphaK) +
+          docVertices.map({
+            case (id, histogram) =>
+              val sigmaLogGamaNkPlusAlphaK = Array.tabulate(histogram.counts.length) { i =>
+                Gamma.logGamma(histogram.counts(i) + a(i))
+              }.sum
+              val logGamaNdPlusAlpha = Gamma.logGamma(nt * a.sum + histogram.counts.sum)
+              sigmaLogGamaNkPlusAlphaK - logGamaNdPlusAlpha
           }).reduce(_ + _)
-      logPWGivenZ + logPZ */
-      throw new NotImplementedException
+      logPWGivenZ + logPZ
     }
 
     /**
